@@ -6,7 +6,7 @@ hosts and tool authors relying on their own help being used.
 ## What it looks like
 
 One installed skill discovers the relevant source and learns from the tool.
-The following is the intended package location, not an implemented skill.
+The shared skill lives at the following package location.
 
 ```text
 skills/discover-smart-tools/SKILL.md
