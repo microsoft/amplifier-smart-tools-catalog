@@ -1,6 +1,6 @@
 ---
 name: amplifier-smart-tools-catalog
-description: Find entries in the Amplifier Smart Tools Catalog for a task, check whether they are available locally, and learn how to use them. Use when looking for available catalog entries, tool-owned installation instructions, or reusable CLI capabilities.
+description: Find Amplifier Smart Tools for a task, check local availability, and learn how to use them. Use for tool discovery, tool-owned installation guidance, or help creating an Amplifier Smart Tool and contributing it to the catalog.
 ---
 
 # Amplifier Smart Tools Catalog
@@ -39,6 +39,25 @@ materials. Do not assume a host API, command, or permission is available.
    installed, usable, and unverified; a PATH match or host subscription is not
    proof. Read installed help before requested operations, preserve argument
    boundaries, and honor normal host permissions and user authorization.
+
+## Create or contribute a tool
+
+For creation or contribution requests, use this path instead of browsing tools.
+
+1. **Build against the current spec.** Start with the
+   [Amplifier Smart Tools specification](https://github.com/microsoft/amplifier-smart-tools/tree/main/spec)
+   and its [reference implementations](https://github.com/microsoft/amplifier-smart-tools/blob/main/spec/examples.md).
+   Read those sources as needed; do not maintain a separate authoring guide here.
+2. **Check the tool.** Point to the spec repository's existing
+   [conformance checks](https://github.com/microsoft/amplifier-smart-tools/tree/main/conformance).
+   Passing those checks does not prove the tool's runtime behavior works.
+3. **Contribute a source pointer.** Add `tools/<slug>/source.json` to the catalog
+   with a credential-free HTTPS `repository` URL. Optional `ref` selects a branch,
+   tag, or full commit SHA and defaults to `main`; optional `path` selects the
+   distribution root containing `smart-tool.json` and defaults to `.`.
+   Submit that source pointer in a pull request. Do not hand-copy `SMART_TOOL.md`
+   or `provenance.json`. After merge to `main`, the existing refresh action
+   generates those files; they are not required in the contribution PR.
 
 ## Boundaries and report
 
