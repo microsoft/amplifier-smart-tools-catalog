@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh exact Smart Tool manifest snapshots without checking out upstream code."""
+"""Refresh exact manifest snapshots for Amplifier Smart Tools without checking out upstream code."""
 
 from __future__ import annotations
 
@@ -410,7 +410,7 @@ def refresh(catalog_root: Path, timeout: int) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Refresh exact Smart Tool manifest snapshots from HTTPS Git sources."
+        description="Refresh exact manifest snapshots for Amplifier Smart Tools from HTTPS Git sources."
     )
     parser.add_argument(
         "--catalog-root",

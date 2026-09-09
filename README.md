@@ -1,23 +1,25 @@
-# Amplifier Tools Smart Catalog
+# Amplifier Smart Tools Catalog
 
 A folder-based catalog and one shared discovery skill for local coding agents.
 
 The product consists of source pointers in `tools/<slug>/source.json`, exact
 generated `SMART_TOOL.md` snapshots with provenance, and the
-`discover-smart-tools` skill. Tools keep their own manifests and usage help.
+`amplifier-smart-tools-catalog` skill. Tools keep their own manifests and usage
+help.
 Skill installation uses existing host tooling such as `npx skills add`.
 This repo does not provide an installer or validation kit.
 
 Browse the entries in [tools/](tools/). All current entries omit `ref`, selecting
 `main`. Entries in multi-tool repositories specify their distribution root
 with `path`; omitting `path` selects the repository root.
-The shared [discovery skill](skills/discover-smart-tools/SKILL.md) verifies and
-uses snapshots before following a selected tool's own installation guidance and
-help. The `refresh-manifests` GitHub Actions workflow refreshes snapshots daily
-and on manual dispatch, and also when a source pointer or refresh implementation
-changes on `main`. Each snapshot records its own last successful refresh time;
-that timestamp is not a claim that it is currently fresh. Failed source refreshes
-preserve the last successful snapshot and are reported in the action logs.
+The shared [discovery skill](skills/amplifier-smart-tools-catalog/SKILL.md)
+verifies and uses snapshots before following a selected tool's own installation
+guidance and help. The `refresh-manifests` GitHub Actions workflow refreshes
+snapshots daily and on manual dispatch, and also when a source pointer or refresh
+implementation changes on `main`. Each snapshot records its own last successful
+refresh time; that timestamp is not a claim that it is currently fresh. Failed
+source refreshes preserve the last successful snapshot and are reported in the
+action logs.
 The snapshot-first skill has not yet been exercised across hosts.
 
 ## Use the skill
@@ -27,8 +29,8 @@ The snapshot-first skill has not yet been exercised across hosts.
 For Claude Code, Codex, and GitHub Copilot, name the agents directly.
 
 ```bash
-npx skills add robotdad/amplifier-tools-smart-catalog \
-  --skill discover-smart-tools \
+npx skills add robotdad/amplifier-smart-tools-catalog \
+  --skill amplifier-smart-tools-catalog \
   --agent claude-code codex github-copilot
 ```
 
@@ -44,7 +46,7 @@ the skill available. Add `--global` for user-wide availability across projects.
 If you prefer to choose through prompts, omit `--agent`.
 
 ```bash
-npx skills add robotdad/amplifier-tools-smart-catalog
+npx skills add robotdad/amplifier-smart-tools-catalog
 ```
 
 The CLI detects installed agents and guides you through target selection and
@@ -55,7 +57,7 @@ For a local checkout, replace the repository argument with its directory path.
 ### Amplifier
 
 Amplifier is not a target supported by the skills CLI.
-For Amplifier, copy or link `skills/discover-smart-tools/` into
+For Amplifier, copy or link `skills/amplifier-smart-tools-catalog/` into
 `.amplifier/skills/` or `~/.amplifier/skills/` and enable its skills capability.
 
 ### Ask for a tool
@@ -70,17 +72,25 @@ Adding the skill does not install Smart Tools or configure their credentials.
 For a project installation, run this from that project.
 
 ```bash
-npx skills update discover-smart-tools -p
+npx skills update amplifier-smart-tools-catalog -p
 ```
 
 For a user-wide installation, use global scope.
 
 ```bash
-npx skills update discover-smart-tools --global
+npx skills update amplifier-smart-tools-catalog --global
 ```
 
-Without a scope flag, `npx skills update discover-smart-tools` prompts for scope.
-Start a fresh coding-agent session after updating so it loads the new instructions.
+Without a scope flag, `npx skills update amplifier-smart-tools-catalog` prompts
+for scope. Start a fresh coding-agent session after updating so it loads the new
+instructions.
+
+### Migrate from `discover-smart-tools`
+
+The published `discover-smart-tools` skill was renamed. First add
+`amplifier-smart-tools-catalog` using the matching scope and agent targets, then
+remove `discover-smart-tools` from that same scope. The new name does not install
+an automatic alias or duplicate of the old skill.
 
 For Amplifier's manual placement, update the source checkout and copy the skill
 again if needed. A symlink uses the updated checkout directly.

@@ -1,4 +1,4 @@
-name: Refresh Smart Tool manifests
+name: Refresh Amplifier Smart Tools manifests
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: refresh Smart Tool manifests"
+          git commit -m "chore: refresh Amplifier Smart Tools manifests"
           echo "created=true" >> "$GITHUB_OUTPUT"
 
       - name: Push generated snapshot commit

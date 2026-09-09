@@ -22,6 +22,52 @@ SPEC.loader.exec_module(refresh_manifests)
 
 
 class RefreshManifestsTests(unittest.TestCase):
+    def test_catalog_branding_uses_the_published_repository_and_skill_name(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        skill_name = "amplifier-smart-tools-catalog"
+        intermediate_skill_name = "amplifier-smart" + "-tools"
+        old_repository_name = "amplifier-tools" + "-smart-catalog"
+        skill_file = catalog_root / "skills" / skill_name / "SKILL.md"
+
+        self.assertEqual(list((catalog_root / "skills").glob("*/SKILL.md")), [skill_file])
+        skill_text = skill_file.read_text()
+        self.assertIn(f"name: {skill_name}", skill_text)
+        self.assertIn("# Amplifier Smart Tools Catalog", skill_text)
+        self.assertIn(
+            "https://github.com/robotdad/amplifier-smart-tools-catalog", skill_text
+        )
+
+        readme = (catalog_root / "README.md").read_text()
+        self.assertIn(f"robotdad/amplifier-smart-tools-catalog", readme)
+        self.assertIn(f"--skill {skill_name}", readme)
+        self.assertIn(f"skills/{skill_name}/", readme)
+        self.assertIn(f"npx skills update {skill_name}", readme)
+        self.assertNotIn(old_repository_name, readme)
+
+        discovery_contract = (catalog_root / "contracts" / "discovery.v1.md").read_text()
+        self.assertIn(f"skills/{skill_name}/SKILL.md", discovery_contract)
+        self.assertIn(f"`{skill_name}`", discovery_contract)
+        self.assertNotIn(old_repository_name, discovery_contract)
+        self.assertNotRegex(
+            "\n".join((readme, discovery_contract, skill_text)),
+            rf"(?<![a-z0-9-]){intermediate_skill_name}(?!-catalog)",
+        )
+
+    def test_brian_tool_sources_use_root_main_distributions(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        expected_repositories = {
+            "home-assistant": "https://github.com/bkrabach/amplifier-smart-tool-home-assistant.git",
+            "music-deck": "https://github.com/bkrabach/amplifier-smart-tool-music-deck.git",
+        }
+
+        for slug, repository in expected_repositories.items():
+            source_file = catalog_root / "tools" / slug / "source.json"
+            self.assertEqual(json.loads(source_file.read_text()), {"repository": repository})
+            self.assertEqual(
+                refresh_manifests.parse_source(source_file),
+                refresh_manifests.Source(repository, "main", "."),
+            )
+
     def test_parse_source_defaults_and_rejects_credential_url(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_name:
             source_file = Path(temporary_name) / "source.json"

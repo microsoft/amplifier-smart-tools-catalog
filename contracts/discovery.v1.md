@@ -9,7 +9,7 @@ One installed skill discovers the relevant source and learns from the tool.
 The shared skill lives at the following package location.
 
 ```text
-skills/discover-smart-tools/SKILL.md
+skills/amplifier-smart-tools-catalog/SKILL.md
 ```
 
 A person asks whether this machine is ready to use DTU. The agent finds its
@@ -25,10 +25,10 @@ its invocation details.
 
 ## Core (the teeth)
 
-1. **One skill serves all entries.** `discover-smart-tools` uses the catalog
-   source contract rather than requiring a skill per tool or hard-coded
-   operation instructions for each entry. It allows only exact generated
-   manifest snapshots with provenance, never independent tool descriptions.
+1. **One skill serves all entries.** `amplifier-smart-tools-catalog` uses the
+   catalog source contract rather than requiring a skill per tool or hard-coded
+   operation instructions for each entry. It allows only exact generated manifest
+   snapshots with provenance, never independent tool descriptions.
 2. **Selection comes from the tool.** The skill first verifies an exact
    generated manifest snapshot against its source pointer and provenance before
    judging relevance. It uses upstream reads only when that snapshot is needed

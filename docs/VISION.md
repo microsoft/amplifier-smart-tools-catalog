@@ -1,4 +1,4 @@
-# Amplifier Tools Smart Catalog - Vision (DRAFT)
+# Amplifier Smart Tools Catalog - Vision (DRAFT)
 
 Written for people using coding agents. Specific promises live in `contracts/`.
 

@@ -1,9 +1,9 @@
 ---
-name: discover-smart-tools
-description: Find Smart Tools for a task, check whether they are available locally, and learn how to use them. Use when looking for available Smart Tools, tool-owned installation instructions, or reusable CLI capabilities.
+name: amplifier-smart-tools-catalog
+description: Find entries in the Amplifier Smart Tools Catalog for a task, check whether they are available locally, and learn how to use them. Use when looking for available catalog entries, tool-owned installation instructions, or reusable CLI capabilities.
 ---
 
-# Discover Smart Tools
+# Amplifier Smart Tools Catalog
 
 Use the shared catalog to find tools, then use each selected tool's own
 materials. Do not assume a host API, command, or permission is available.
@@ -11,7 +11,7 @@ materials. Do not assume a host API, command, or permission is available.
 ## Five steps
 
 1. **Locate the catalog.** Use
-   `https://github.com/robotdad/amplifier-tools-smart-catalog` on `main`, unless
+   `https://github.com/robotdad/amplifier-smart-tools-catalog` on `main`, unless
    the user explicitly supplies a local catalog root. Enumerate
    `tools/*/source.json` from that one source; a local root is not this skill's
    directory by implication.
