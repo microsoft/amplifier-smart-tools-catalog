@@ -44,8 +44,10 @@ The catalog preserves the upstream tool as the owner of its description.
 6. **Provenance is reported.** Readers identify the repository, distribution
    path, requested or default ref, and resolved commit used for the lookup.
 7. **The tool owns the manifest.** Readers follow upstream `smart-tool.json`
-   to `SMART_TOOL.md`. Entries do not contain copied manifests or separately
-   maintained tool descriptions.
+   to `SMART_TOOL.md`. An entry may contain only an exact generated
+   `SMART_TOOL.md` snapshot plus provenance recording its source and refresh
+   time; it must not contain an independently written or maintained tool
+   description.
 8. **A failed lookup is visible.** An inaccessible repository, unresolved ref,
    or missing descriptor or manifest produces a specific blocker for that
    entry, not invented metadata or a silent switch to another source.
@@ -53,8 +55,8 @@ The catalog preserves the upstream tool as the owner of its description.
 ## What v1 deliberately does NOT freeze
 
 - Fetch library or GitHub API choice - reconsider when a transport limits use.
-- Generated search summaries or offline caching - reconsider when measured
-  catalog size, latency, or offline use makes direct reading inadequate.
+- Search summaries beyond exact generated manifest snapshots - reconsider when
+  measured catalog size, latency, or offline use makes them necessary.
 - Installation mechanisms remain owned by the tool and existing host tooling.
   This catalog does not ship an installer.
 
@@ -68,4 +70,6 @@ claim that checks have passed.
 - An unavailable main does not fall back to another branch.
 - Descriptor and manifest provenance contains the same resolved commit.
 - Missing source artifacts produce named blockers rather than substituted data.
-- Entries require no aggregate file or copied manifest.
+- Generated snapshots, when present, preserve the upstream manifest bytes and
+  record the repository, requested ref, distribution path, resolved commit,
+  original manifest path, and successful refresh time.

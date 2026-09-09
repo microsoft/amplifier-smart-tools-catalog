@@ -1,0 +1,65 @@
+name: Refresh Smart Tool manifests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/**/source.json"
+      - "scripts/refresh_manifests.py"
+      - ".github/workflows/refresh-manifests.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-manifests-main
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Refresh snapshots
+        id: refresh
+        run: |
+          set +e
+          env -u GITHUB_TOKEN python3 scripts/refresh_manifests.py
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit successful snapshots
+        id: commit
+        if: steps.refresh.outputs.exit_code == '0' || steps.refresh.outputs.exit_code == '1'
+        run: |
+          while IFS= read -r -d '' file; do
+            git add -- "$file"
+          done < <(find tools -mindepth 2 -maxdepth 2 -type f \( -name SMART_TOOL.md -o -name provenance.json \) -print0)
+          if git diff --cached --quiet; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh Smart Tool manifests"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push generated snapshot commit
+        if: steps.commit.outputs.created == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')" push origin HEAD:main
+
+      - name: Fail when refresh reported errors
+        if: always() && steps.refresh.outputs.exit_code != '0' && steps.refresh.outputs.exit_code != ''
+        run: exit 1

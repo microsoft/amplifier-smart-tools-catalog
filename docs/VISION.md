@@ -23,15 +23,17 @@ The person sees what the agent found, which source revision it inspected, and
 whether the current environment can use it. Missing software or credentials
 produce an explanation rather than an invented success.
 
-People and agents read the same upstream description. Adding a catalog entry
-does not create another copy of the tool's instructions to keep synchronized.
+People and agents read the same upstream description. The catalog may retain an
+exact generated manifest snapshot with source provenance, but adding an entry
+does not create an independently written copy of the tool's instructions.
 
 ## Principles
 
 ### 1. **The tool owns its description.**
 
-The catalog points to upstream metadata rather than maintaining copies.
-Missing guidance belongs in the tool before it becomes another wrapper.
+The catalog points to upstream metadata and may retain only exact generated
+manifest snapshots with source provenance. Missing guidance belongs in the tool
+before it becomes another wrapper or independently maintained description.
 
 ### 2. **One discovery skill serves the catalog.**
 
@@ -55,7 +57,7 @@ person's environment. The host's authorization rules remain in force.
 
 ## What this deliberately resists
 
-- Per-tool skills and copied manifests that duplicate upstream knowledge.
+- Per-tool skills and independently written or maintained manifest copies.
 - A mandatory aggregate inventory or service for a small folder-based catalog.
 - A new plugin marketplace or MCP execution gateway.
 - Whole-machine scanning and automatic installation based only on relevance.

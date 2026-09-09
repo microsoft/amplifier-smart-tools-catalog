@@ -13,7 +13,8 @@ product behavior. Draft status is not evidence of approval or working software.
 ## Keep it small
 
 - Maintain one discovery skill, not instructions per tool.
-- Keep tool descriptions upstream. Catalog entries point to sources.
+- Keep tool descriptions upstream. The only permitted copies are exact generated
+  `SMART_TOOL.md` snapshots with provenance; never add independent descriptions.
 - Do not introduce a top-level inventory, MCP gateway, marketplace, background
   service, or machine-wide scanner without evidence and an explicit decision.
 - Do not change neighboring repositories as a side effect of this project.

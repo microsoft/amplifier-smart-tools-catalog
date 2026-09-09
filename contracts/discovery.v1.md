@@ -27,10 +27,12 @@ its invocation details.
 
 1. **One skill serves all entries.** `discover-smart-tools` uses the catalog
    source contract rather than requiring a skill per tool or hard-coded
-   operation instructions for each entry.
-2. **Selection comes from the tool.** The skill reads upstream descriptors and
-   manifests at the resolved source revision to judge relevance.
-   It carries the provenance from the source lookup into its report.
+   operation instructions for each entry. It allows only exact generated
+   manifest snapshots with provenance, never independent tool descriptions.
+2. **Selection comes from the tool.** The skill first verifies an exact
+   generated manifest snapshot against its source pointer and provenance before
+   judging relevance. It uses upstream reads only when that snapshot is needed
+   but unavailable or invalid, and carries provenance into its report.
 3. **Installed behavior governs invocation.** The skill checks the expected
    launch command and reads installed CLI help before invoking an operation.
    A PATH match alone is not proof of tool identity or compatible version.
