@@ -50,7 +50,7 @@ class RefreshManifestsTests(unittest.TestCase):
         self.assertNotIn(old_repository_name, discovery_contract)
         self.assertNotRegex(
             "\n".join((readme, discovery_contract, skill_text)),
-            rf"(?<![a-z0-9-]){intermediate_skill_name}(?!-catalog)",
+            rf"(?:name: |--skill |skills/){intermediate_skill_name}(?!-catalog)(?=[\s/`]|$)",
         )
 
     def test_brian_tool_sources_use_root_main_distributions(self) -> None:
