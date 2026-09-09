@@ -7,9 +7,9 @@ The product consists of source pointers in `tools/<slug>/source.json` and the
 Skill installation uses existing host tooling such as `npx skills add`.
 This repo does not provide an installer or validation kit.
 
-The catalog contains [tmux](tools/tmux/source.json) and
-[Digital Twin Universe](tools/digital-twin-universe/source.json).
-Both omit `ref` and `path`, selecting `main` and the repository root.
+Browse the entries in [tools/](tools/). All current entries omit `ref`, selecting
+`main`. Entries in multi-tool repositories specify their distribution root
+with `path`; omitting `path` selects the repository root.
 The shared [discovery skill](skills/discover-smart-tools/SKILL.md) reads these
 pointers and follows each tool's own manifest, installation guidance, and help.
 Cross-host operation has not been tested yet.
