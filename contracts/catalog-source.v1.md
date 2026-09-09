@@ -1,8 +1,7 @@
 # Catalog Source Contract - v1 (DRAFT)
 
 **Who builds against this** Catalog contributors and consumers that read source
-pointers, including the shared discovery skill. Proposed source fixtures and
-resolution checks provide the check; no implementation exists yet.
+pointers, including the shared discovery skill.
 
 ## What it looks like
 
@@ -56,12 +55,13 @@ The catalog preserves the upstream tool as the owner of its description.
 - Fetch library or GitHub API choice - reconsider when a transport limits use.
 - Generated search summaries or offline caching - reconsider when measured
   catalog size, latency, or offline use makes direct reading inadequate.
-- A universal package installer - reconsider only if tool-owned instructions
-  fail a demonstrated installation workflow.
+- Installation mechanisms remain owned by the tool and existing host tooling.
+  This catalog does not ship an installer.
 
-## Conformance kit asserts
+## Observable behavior
 
-No kit exists yet. These observations are planned, not passing checks.
+These criteria describe correctness, not a validation-kit deliverable or a
+claim that checks have passed.
 
 - Omitted fields resolve to main and the root; explicit nested paths work.
 - A full commit pin is preserved and a moving branch is resolved only once.
@@ -69,12 +69,3 @@ No kit exists yet. These observations are planned, not passing checks.
 - Descriptor and manifest provenance contains the same resolved commit.
 - Missing source artifacts produce named blockers rather than substituted data.
 - Entries require no aggregate file or copied manifest.
-
-## Reserved / open questions (NOT frozen)
-
-- Validation details for unknown fields, empty values, slug spelling, and
-  supported full object-ID formats remain to be specified before implementation.
-- Path containment checks, including traversal and symlinks, must be specified
-  before a resolver reads untrusted repository paths.
-- The first two entries may pin inspected commits or use the main default;
-  entry policy is not chosen by this schema contract.

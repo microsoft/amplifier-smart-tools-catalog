@@ -1,8 +1,7 @@
 # Discovery Contract - v1 (DRAFT)
 
 **Who builds against this** People installing the shared skill in local coding
-hosts and tool authors relying on their own help being used. Cross-host session
-trials provide the check; none has run for this catalog.
+hosts and tool authors relying on their own help being used.
 
 ## What it looks like
 
@@ -59,12 +58,13 @@ its invocation details.
 - Local inventory services - reconsider when selected-command checks prove
   inadequate, not merely because a registry could be built.
 - Exact prose of the skill - improve it when a recorded trial exposes ambiguity.
-- Exact installer tooling - try `npx skills add` and Amplifier skill placement
-  first, and reconsider the route if a host trial shows it does not work.
+- Exact external installer tooling is not a product interface. This catalog
+  does not ship an installer.
 
-## Conformance kit asserts
+## Observable behavior
 
-These are proposed session observations. No host trial has passed yet.
+These criteria describe correctness, not a validation-kit deliverable or a
+claim that checks have passed.
 
 - A fresh host discovers the single skill and finds tmux or DTU without a
   manually supplied per-tool instruction.
@@ -73,9 +73,3 @@ These are proposed session observations. No host trial has passed yet.
 - Reported provenance matches the source reads recorded in the session.
 - Installation of the skill alone does not install tools or launch environments.
 - The host-specific report includes client version, environment, and evidence.
-
-## Reserved / open questions (NOT frozen)
-
-- Which host runs first, and what approved trial rubric and budget apply?
-- How does the installed skill locate and enumerate the catalog when an
-  installer copies only the skill directory rather than the repository?

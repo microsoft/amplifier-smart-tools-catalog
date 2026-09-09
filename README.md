@@ -2,17 +2,15 @@
 
 A folder-based catalog and one shared discovery skill for local coding agents.
 
-This repository currently contains direction drafts only. No catalog entries,
-discovery skill, installer, or validation kit is implemented.
+The product consists of source pointers in `tools/<slug>/source.json` and the
+`discover-smart-tools` skill. Tools keep their own manifests and usage help.
+Skill installation uses existing host tooling such as `npx skills add`.
+This repo does not provide an installer or validation kit.
 
-## Review order
+The catalog entries and skill are not implemented yet.
 
-1. [Vision](docs/VISION.md)
-2. [Catalog source contract](contracts/catalog-source.v1.md)
-3. [Discovery contract](contracts/discovery.v1.md)
-4. [Bootstrap decisions and validation plan](docs/PLAN.md)
-5. [Original review design](docs/designs/smart-tools-discovery-review.md)
+## Product direction
 
-The intended repository is `robotdad/amplifier-tools-smart-catalog`.
-GitHub visibility and publication remain pending.
-The intended skill is `discover-smart-tools`. There is no installable skill yet.
+- [Vision](docs/VISION.md)
+- [Catalog source contract](contracts/catalog-source.v1.md)
+- [Discovery contract](contracts/discovery.v1.md)
