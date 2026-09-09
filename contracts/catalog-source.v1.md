@@ -1,0 +1,80 @@
+# Catalog Source Contract - v1 (DRAFT)
+
+**Who builds against this** Catalog contributors and consumers that read source
+pointers, including the shared discovery skill. Proposed source fixtures and
+resolution checks provide the check; no implementation exists yet.
+
+## What it looks like
+
+A contributor adds one folder. The source pointer can float on main or identify
+a specific revision without describing the tool a second time.
+
+```text
+tools/tmux/source.json
+```
+
+```json
+{
+  "repository": "https://github.com/microsoft/amplifier-smart-tool-tmux.git",
+  "ref": "9a4a167101c92b803f7a693e6614a21a6d21cf5b"
+}
+```
+
+## Purpose
+
+Contributors and readers agree on where a tool comes from.
+Defaults cannot silently change a lookup's meaning.
+The catalog preserves the upstream tool as the owner of its description.
+
+## Core (the teeth)
+
+1. **The inventory is folder-based.** Entries live at `tools/<slug>/source.json`.
+   Readers enumerate that directory without requiring a top-level inventory.
+2. **A source pointer identifies a repository and optional location.**
+   `repository` is a required HTTPS Git URL. Optional string `ref` identifies
+   a branch, tag, or full commit SHA. Optional string `path` identifies the
+   distribution root containing `smart-tool.json`.
+3. **Omission has explicit defaults.** Missing `ref` means exactly `main`.
+   Missing `path` means `.`. An unavailable main branch is an error, not a
+   reason to substitute the repository's default branch.
+4. **Revision and URL are separate.** `repository` uses HTTPS Git notation,
+   not an installer-specific `git+https` URL containing a revision.
+5. **A lookup uses one resolved commit.** A branch or tag is resolved once for
+   each inspected source per discovery operation. Descriptor and manifest
+   are read from that same commit. A full commit pin is honored.
+6. **Provenance is reported.** Readers identify the repository, distribution
+   path, requested or default ref, and resolved commit used for the lookup.
+7. **The tool owns the manifest.** Readers follow upstream `smart-tool.json`
+   to `SMART_TOOL.md`. Entries do not contain copied manifests or separately
+   maintained tool descriptions.
+8. **A failed lookup is visible.** An inaccessible repository, unresolved ref,
+   or missing descriptor or manifest produces a specific blocker for that
+   entry, not invented metadata or a silent switch to another source.
+
+## What v1 deliberately does NOT freeze
+
+- Fetch library or GitHub API choice - reconsider when a transport limits use.
+- Generated search summaries or offline caching - reconsider when measured
+  catalog size, latency, or offline use makes direct reading inadequate.
+- A universal package installer - reconsider only if tool-owned instructions
+  fail a demonstrated installation workflow.
+
+## Conformance kit asserts
+
+No kit exists yet. These observations are planned, not passing checks.
+
+- Omitted fields resolve to main and the root; explicit nested paths work.
+- A full commit pin is preserved and a moving branch is resolved only once.
+- An unavailable main does not fall back to another branch.
+- Descriptor and manifest provenance contains the same resolved commit.
+- Missing source artifacts produce named blockers rather than substituted data.
+- Entries require no aggregate file or copied manifest.
+
+## Reserved / open questions (NOT frozen)
+
+- Validation details for unknown fields, empty values, slug spelling, and
+  supported full object-ID formats remain to be specified before implementation.
+- Path containment checks, including traversal and symlinks, must be specified
+  before a resolver reads untrusted repository paths.
+- The first two entries may pin inspected commits or use the main default;
+  entry policy is not chosen by this schema contract.
