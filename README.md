@@ -22,22 +22,71 @@ The snapshot-first skill has not yet been exercised across hosts.
 
 ## Use the skill
 
-Add the skill with existing skills tooling.
+### Choose agents explicitly
+
+For Claude Code, Codex, and GitHub Copilot, name the agents directly.
+
+```bash
+npx skills add robotdad/amplifier-tools-smart-catalog \
+  --skill discover-smart-tools \
+  --agent claude-code codex github-copilot
+```
+
+Keep only the agents you use. For example, to select just Codex, use
+`--agent codex`. This skips agent selection, but other setup prompts may remain.
+Add `--yes` if you want to accept the remaining defaults without prompts.
+
+The default is project scope. Run the command from the project where you want
+the skill available. Add `--global` for user-wide availability across projects.
+
+### Choose interactively
+
+If you prefer to choose through prompts, omit `--agent`.
 
 ```bash
 npx skills add robotdad/amplifier-tools-smart-catalog
 ```
 
-Follow the interactive prompts to select the target agents.
+The CLI detects installed agents and guides you through target selection and
+setup. Omitting `--agent` does not mean installing to every supported agent.
+
 For a local checkout, replace the repository argument with its directory path.
-The default is project scope; add `--global` for user scope.
+
+### Amplifier
+
+Amplifier is not a target supported by the skills CLI.
 For Amplifier, copy or link `skills/discover-smart-tools/` into
 `.amplifier/skills/` or `~/.amplifier/skills/` and enable its skills capability.
+
+### Ask for a tool
 
 Ask the host to find a Smart Tool for a task or explain how to install one.
 The skill normally reads the catalog from GitHub. To use an unpublished local
 catalog, explicitly give the host the checkout path.
 Adding the skill does not install Smart Tools or configure their credentials.
+
+## Update the skill
+
+For a project installation, run this from that project.
+
+```bash
+npx skills update discover-smart-tools -p
+```
+
+For a user-wide installation, use global scope.
+
+```bash
+npx skills update discover-smart-tools --global
+```
+
+Without a scope flag, `npx skills update discover-smart-tools` prompts for scope.
+Start a fresh coding-agent session after updating so it loads the new instructions.
+
+For Amplifier's manual placement, update the source checkout and copy the skill
+again if needed. A symlink uses the updated checkout directly.
+
+Skill updates are separate from catalog refreshes. The GitHub Action refreshes
+catalog snapshots; updating the skill gets changes to the discovery instructions.
 
 ## Product direction
 
