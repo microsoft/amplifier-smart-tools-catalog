@@ -1,7 +1,5 @@
 # Amplifier Smart Tools Catalog
 
-Licensed under the [MIT License](LICENSE).
-
 A catalog and one shared skill for finding Amplifier Smart Tools from your
 coding agent. Browse [the catalog](tools/) or install the
 [discovery skill](skills/amplifier-smart-tools-catalog/SKILL.md).
@@ -49,9 +47,8 @@ For Amplifier, copy or link `skills/amplifier-smart-tools-catalog/` into
 
 ## Use the skill
 
-Ask the host to find a Smart Tool for a task or explain how to install one.
-You can also ask for help creating an Amplifier Smart Tool or adding one to
-the catalog.
+Ask your agent to find a Smart Tool for a task or explain how to install one.
+You can also ask for help creating a Smart Tool or adding one to the catalog.
 
 The skill normally reads the catalog from GitHub. If you want it to use a local
 catalog checkout instead, explicitly give the host that path.
@@ -109,6 +106,12 @@ The snapshot-first skill has not yet been exercised across hosts.
 
 </details>
 
+## Product direction
+
+- [Vision](docs/VISION.md)
+- [Catalog source contract](contracts/catalog-source.v1.md)
+- [Discovery contract](contracts/discovery.v1.md)
+
 ## Contributing
 
 Submit catalog pull requests with source pointers only: add or update
@@ -140,8 +143,6 @@ Use of Microsoft trademarks or logos in modified versions of this project must
 not cause confusion or imply Microsoft sponsorship. Any use of third-party
 trademarks or logos is subject to those third-party's policies.
 
-## Product direction
+## License
 
-- [Vision](docs/VISION.md)
-- [Catalog source contract](contracts/catalog-source.v1.md)
-- [Discovery contract](contracts/discovery.v1.md)
+[MIT](LICENSE)
