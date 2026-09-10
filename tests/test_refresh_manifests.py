@@ -22,7 +22,7 @@ SPEC.loader.exec_module(refresh_manifests)
 
 
 class RefreshManifestsTests(unittest.TestCase):
-    def test_catalog_branding_uses_the_published_repository_and_skill_name(self) -> None:
+    def test_catalog_branding_uses_the_microsoft_repository_and_skill_name(self) -> None:
         catalog_root = SCRIPT.parents[1]
         skill_name = "amplifier-smart-tools-catalog"
         intermediate_skill_name = "amplifier-smart" + "-tools"
@@ -34,11 +34,11 @@ class RefreshManifestsTests(unittest.TestCase):
         self.assertIn(f"name: {skill_name}", skill_text)
         self.assertIn("# Amplifier Smart Tools Catalog", skill_text)
         self.assertIn(
-            "https://github.com/robotdad/amplifier-smart-tools-catalog", skill_text
+            "https://github.com/microsoft/amplifier-smart-tools-catalog", skill_text
         )
 
         readme = (catalog_root / "README.md").read_text()
-        self.assertIn(f"robotdad/amplifier-smart-tools-catalog", readme)
+        self.assertIn(f"microsoft/amplifier-smart-tools-catalog", readme)
         self.assertIn(f"--skill {skill_name}", readme)
         self.assertIn(f"skills/{skill_name}/", readme)
         self.assertIn(f"npx skills update {skill_name}", readme)
@@ -52,6 +52,39 @@ class RefreshManifestsTests(unittest.TestCase):
             "\n".join((readme, discovery_contract, skill_text)),
             rf"(?:name: |--skill |skills/){intermediate_skill_name}(?!-catalog)(?=[\s/`]|$)",
         )
+
+    def test_repository_readiness_files_describe_the_minimal_contribution_flow(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        readme = (catalog_root / "README.md").read_text()
+        support = (catalog_root / "SUPPORT.md").read_text()
+        workflow = (catalog_root / ".github" / "workflows" / "ci.yml").read_text()
+
+        self.assertIn("source pointers only", readme)
+        self.assertIn("generated `SMART_TOOL.md`", readme)
+        self.assertIn("[Microsoft Open Source Code of Conduct](CODE_OF_CONDUCT.md)", readme)
+        self.assertIn("[SECURITY.md](SECURITY.md)", readme)
+        self.assertIn("Contributor License Agreement (CLA)", readme)
+        self.assertIn("Microsoft's Trademark & Brand Guidelines", readme)
+        self.assertEqual(
+            support,
+            """# Support
+
+For catalog issues, open an issue in this repository. For individual Smart Tool
+behavior, contact the upstream repository identified by that tool's source
+pointer.
+
+Do not report security vulnerabilities publicly; follow [SECURITY.md](SECURITY.md).
+
+This repository does not make a response-time commitment.""",
+        )
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("push:", workflow)
+        self.assertIn("branches: [main]", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertIn("runs-on: ubuntu-latest", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertIn("PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v", workflow)
+        self.assertNotIn("refresh_manifests.py", workflow)
 
     def test_brian_tool_sources_use_root_main_distributions(self) -> None:
         catalog_root = SCRIPT.parents[1]

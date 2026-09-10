@@ -38,4 +38,5 @@ product behavior. Draft status is not evidence of approval or working software.
   to locked documents or invent ratification.
 - A locked document changes only through a sibling candidate proposal.
 - Derive later work from approved promises and observed gaps.
-- No implementation test command exists yet. Do not invent one in reports.
+- Run `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v`
+  before reporting implementation work complete.

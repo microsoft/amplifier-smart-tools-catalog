@@ -1,1 +1,3 @@
 .converge/
+__pycache__/
+*.py[cod]

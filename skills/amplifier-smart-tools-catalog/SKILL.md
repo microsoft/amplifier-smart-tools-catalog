@@ -11,7 +11,7 @@ materials. Do not assume a host API, command, or permission is available.
 ## Five steps
 
 1. **Locate the catalog.** Use
-   `https://github.com/robotdad/amplifier-smart-tools-catalog` on `main`, unless
+   `https://github.com/microsoft/amplifier-smart-tools-catalog` on `main`, unless
    the user explicitly supplies a local catalog root. Enumerate
    `tools/*/source.json` from that one source; a local root is not this skill's
    directory by implication.
