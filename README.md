@@ -53,6 +53,11 @@ You can also ask for help creating a Smart Tool or adding one to the catalog.
 The skill normally reads the catalog from GitHub. If you want it to use a local
 catalog checkout instead, explicitly give the host that path.
 
+For an interactive review, the skill also checks a selected tool's own guidance
+for an optional MCP adapter or MCP App. Installation, connection, and host view
+support are separate readiness checks. This does not make MCP a catalog
+requirement, launch a service during discovery, or change source pointer fields.
+
 ## Update the skill
 
 For a project installation, run this from that project.

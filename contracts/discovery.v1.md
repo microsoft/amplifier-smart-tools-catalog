@@ -53,10 +53,18 @@ its invocation details.
 8. **Skill installation is separate from tool installation.** The documented
    host setup makes the same skill discoverable without claiming to install
    Smart Tools or configure their provider credentials.
+9. **Optional presentation is checked separately.** For a requested interactive
+   review, the skill can follow the selected tool's installed documentation to
+   an optional MCP adapter and MCP App. It distinguishes configured, connected,
+   advertised, and actually rendered capabilities. Unsupported views have a
+   documented headless fallback or a visible blocker. Attaching retained work
+   does not authorize regeneration, and closing a view is not cancellation.
 
 ## What v1 deliberately does NOT freeze
 
-- MCP or plugin adapters - reconsider only after a host cannot use the CLI flow.
+- Adapter discovery fields and host configuration formats. The catalog does not
+  define a second adapter registry or require MCP; optional adapters are learned
+  from upstream help when the requested workflow benefits from an embedded view.
 - Local inventory services - reconsider when selected-command checks prove
   inadequate, not merely because a registry could be built.
 - Exact prose of the skill - improve it when a recorded trial exposes ambiguity.
