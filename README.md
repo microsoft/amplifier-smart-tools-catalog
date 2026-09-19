@@ -40,8 +40,27 @@ For a local checkout, replace the repository argument with its directory path.
 <summary>Installing in Amplifier</summary>
 
 Amplifier is not a target supported by the skills CLI.
-For Amplifier, copy or link `skills/amplifier-smart-tools-catalog/` into
-`.amplifier/skills/` or `~/.amplifier/skills/` and enable its skills capability.
+The Amplifier App CLI already provides Skills. Add the catalog behavior
+persistently with:
+
+```bash
+amplifier bundle add 'git+https://github.com/microsoft/amplifier-smart-tools-catalog@main#subdirectory=behaviors/smart-tools-catalog.yaml' --app
+```
+
+This is user-wide and composes the behavior into every new Amplifier session;
+it does not select the behavior as a root bundle. Other Amplifier hosts must
+already compose Skills. The App CLI needs no separate skills-capability enable
+step.
+
+Start a new session with `amplifier`, use `/skills` to confirm discovery, then
+ask naturally for a Smart Tool for the task. Adding the discovery skill does
+not install Smart Tools or configure credentials.
+
+The behavior's remote skill tracks the catalog's `main` independently of a
+revision pin on the behavior URI. For a controlled version instead, manually
+copy or link the existing `skills/amplifier-smart-tools-catalog/` folder from a
+pinned checkout into `.amplifier/skills/` or `~/.amplifier/skills/`; normal
+Amplifier skill discovery needs no enable step.
 
 </details>
 
@@ -75,8 +94,26 @@ npx skills update amplifier-smart-tools-catalog --global
 Without a scope flag, `npx skills update amplifier-smart-tools-catalog` prompts
 for scope.
 
-For Amplifier's manual placement, update the source checkout and copy the skill
-again if needed. A symlink uses the updated checkout directly.
+For an Amplifier App CLI behavior installation, run:
+
+```bash
+amplifier update
+```
+
+Then start a fresh `amplifier` session. This can refresh other eligible
+Amplifier sources as well, so it is not a catalog-only update.
+
+For a manually copied or linked skill, update the source checkout to the
+revision you want. Copy the skill again if needed; a symlink reads that checkout.
+
+To stop composing the behavior into future App CLI sessions, run:
+
+```bash
+amplifier bundle remove smart-tools-catalog-behavior --app
+```
+
+Removal unregisters future composition; it does not uninstall Smart Tool
+programs or promise deletion of a cached remote skill.
 
 Skill updates are separate from catalog refreshes. The GitHub Action refreshes
 catalog snapshots; updating the skill gets changes to the discovery instructions.

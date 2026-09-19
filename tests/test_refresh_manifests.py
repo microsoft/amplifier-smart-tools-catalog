@@ -22,6 +22,62 @@ SPEC.loader.exec_module(refresh_manifests)
 
 
 class RefreshManifestsTests(unittest.TestCase):
+    def test_smart_tools_catalog_behavior_configures_one_remote_skill_without_source(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        behavior = (catalog_root / "behaviors" / "smart-tools-catalog.yaml").read_text().rstrip("\n")
+
+        self.assertEqual(
+            behavior,
+            "\n".join(
+                (
+                    "bundle:",
+                    "  name: smart-tools-catalog-behavior",
+                    "  version: 0.1.0",
+                    "  description: Adds the Smart Tools Catalog discovery skill to an existing Skills-equipped host.",
+                    "",
+                    "tools:",
+                    "  - module: tool-skills",
+                    "    config:",
+                    "      skills:",
+                    '        - "git+https://github.com/microsoft/amplifier-smart-tools-catalog@main#subdirectory=skills"',
+                )
+            ),
+        )
+        for prohibited_key in (
+            "source:",
+            "include:",
+            "includes:",
+            "provider:",
+            "providers:",
+            "session:",
+            "sessions:",
+            "context:",
+            "body:",
+            "agent:",
+            "agents:",
+            "root_manifest:",
+        ):
+            self.assertNotIn(prohibited_key, behavior)
+
+    def test_readme_documents_amplifier_behavior_lifecycle(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        readme = (catalog_root / "README.md").read_text()
+
+        self.assertIn(
+            "amplifier bundle add 'git+https://github.com/microsoft/"
+            "amplifier-smart-tools-catalog@main#subdirectory=behaviors/"
+            "smart-tools-catalog.yaml' --app",
+            readme,
+        )
+        self.assertIn("This is user-wide and composes the behavior into every new Amplifier session;", readme)
+        self.assertIn("The Amplifier App CLI already provides Skills.", readme)
+        self.assertIn("can refresh other eligible\nAmplifier sources as well, so it is not a catalog-only update.", readme)
+        self.assertIn(
+            "amplifier bundle remove smart-tools-catalog-behavior --app",
+            readme,
+        )
+        self.assertNotIn("and enable its skills capability", readme)
+
     def test_catalog_branding_uses_the_microsoft_repository_and_skill_name(self) -> None:
         catalog_root = SCRIPT.parents[1]
         skill_name = "amplifier-smart-tools-catalog"
