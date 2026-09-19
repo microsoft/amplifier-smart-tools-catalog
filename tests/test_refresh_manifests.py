@@ -22,6 +22,24 @@ SPEC.loader.exec_module(refresh_manifests)
 
 
 class RefreshManifestsTests(unittest.TestCase):
+    def test_catalog_root_manifest_is_identity_only(self) -> None:
+        catalog_root = SCRIPT.parents[1]
+        root = (catalog_root / "bundle.md").read_text()
+        prefix, metadata, body = root.split("---", 2)
+
+        self.assertEqual(prefix, "")
+        self.assertEqual(body.strip(), "")
+        self.assertEqual(
+            [line for line in metadata.splitlines() if line and not line.startswith(" ")],
+            ["bundle:"],
+        )
+        self.assertEqual(
+            [line.strip().split(":", 1)[0] for line in metadata.splitlines() if line.startswith("  ")],
+            ["name", "version", "description"],
+        )
+        self.assertIn("  name: smart-tools-catalog\n", metadata)
+        self.assertIn("behaviors/smart-tools-catalog.yaml", metadata)
+
     def test_smart_tools_catalog_behavior_configures_one_remote_skill_without_source(self) -> None:
         catalog_root = SCRIPT.parents[1]
         behavior = (catalog_root / "behaviors" / "smart-tools-catalog.yaml").read_text().rstrip("\n")

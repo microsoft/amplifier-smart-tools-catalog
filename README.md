@@ -52,6 +52,9 @@ it does not select the behavior as a root bundle. Other Amplifier hosts must
 already compose Skills. The App CLI needs no separate skills-capability enable
 step.
 
+The metadata-only `bundle.md` lets Foundation recognize this Git repository as
+a bundle source; it does not provide a runnable host.
+
 Start a new session with `amplifier`, use `/skills` to confirm discovery, then
 ask naturally for a Smart Tool for the task. Adding the discovery skill does
 not install Smart Tools or configure credentials.
