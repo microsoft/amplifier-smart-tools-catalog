@@ -12,8 +12,16 @@ use_cases:
 platforms:
   - macos
 requires:
+  - name: mcp-host
+    purpose: Optional stdio MCP and portable MCP Apps review; install the mcp extra. No host is needed for library or CLI use.
+    optional: true
+    install: https://github.com/robotdad/amplifier-smart-tool-stories/blob/main/docs/MCP.md
   - name: model-provider-access
     purpose: Needed for generation and intelligent comment responses; retained review works without it.
+    optional: true
+    install: https://github.com/robotdad/amplifier-smart-tool-stories/blob/main/docs/USAGE.md
+  - name: ffmpeg
+    purpose: ffmpeg with libx264 and ffprobe for video export; ffprobe also inspects imported clips.
     optional: true
     install: https://github.com/robotdad/amplifier-smart-tool-stories/blob/main/docs/USAGE.md
   - name: pango
@@ -25,7 +33,7 @@ requires:
 
 Create evidence-based HTML stories and review them with a person. The Python
 library is the product; the `stories` CLI and optional local dashboard share its
-state. It supports HTML presentations, structured documents and anchored review.
+state. It supports HTML presentations with retained images/video, structured documents and anchored review.
 Documents export as HTML, Letter PDF or editable Word; PowerPoint and spreadsheets
 remain deferred.
 
@@ -97,10 +105,11 @@ viewer = api.start_dashboard(story_id, revision_id)
 
 Open the returned private loopback URL only when authorized. No browser is opened
 implicitly. It is a bearer capability for this story; do not share it. The opaque
-iframe suppresses source scripts, forms and external resources. It displays static
-HTML/CSS with review-owned navigation for `.slide` sections. It is an approximate
-static preview when the original relies on scripts; exact original HTML is retained
-for export. Browser annotations and drafts never modify exported bytes.
+iframe suppresses source scripts, forms and unregistered resources. It displays
+HTML/CSS and explicitly attached media, with review-owned navigation for `.slide`
+sections. Original markup is retained; media exports resolve its asset references.
+Browser annotations and drafts never enter exports. Static rendered review uses
+video posters and does not certify playback or audio.
 
 Use `get-preview` to discover anchors. Text anchors contain kind=text, element,
 start/end (Unicode character offsets within that element), and exact quote. Element
@@ -115,8 +124,10 @@ api = Stories("/chosen/state", model_env=True, provider="anthropic", execution="
 api.grant_feedback(story_id, {"max_operations": 5, "timeout_seconds": 180}, "grant-1")
 viewer = api.start_dashboard(story_id, revision_id)
 ```
-Each user comment consumes one operation allowance when queued. Typing/saving drafts
-never spends. A grant expires after one hour by default, at most 24 hours, and limits
+Each user comment consumes one operation allowance when queued. In immediate execution,
+if model access is not enabled, Stories retains the comment as `awaiting_model_access`
+without consuming a grant or launching work that would fail; queued execution can retain
+authorized work for a later model-enabled worker. Typing/saving drafts never spends. A grant expires after one hour by default, at most 24 hours, and limits
 operations, time per operation and output tokens per call. Each operation uses at most
 five presentation model calls, or eleven for documents reviewed in batches of up to
 three pages: evidence/planning, composition, source/page review, and at most one repair
@@ -164,7 +175,7 @@ All exist as methods on Stories (hyphens become underscores):
   reported interrupted/uncertain; cancel it before explicitly creating replacement work.
 - `run-operation`: claim and execute one queued operation exactly once.
 - `cancel-operation`: prevent late commits and cooperatively stop active model work.
-- `export`: write a named revision to a new output_path; format html (default), pdf or docx.
+- `export`: write a named revision to a new output_path; format html (default), zip, pdf or docx.
 - `get-export`: base64 bytes, MIME type, revision and source/output hashes, checks and limits.
   PDF/Word support structured documents only; no arbitrary HTML conversion.
 - `storytelling-capabilities`: provider-free writing approaches and upstream mapping.
@@ -196,7 +207,7 @@ State and events are retained without automatic expiration in the chosen local s
 No automatic publication, notification, caller wake-up, repository access, commits or pushes.
 Only supplied content is available to intelligence. HTML with external assets or source
 scripts may preview differently; exported originals may contain their original active
-content. Independent semantic/visual grading, production brand systems, images/equations,
+content. Independent semantic/visual grading, production brand systems, document images/equations,
 general conversion remain outside this slice.
 
 
@@ -290,3 +301,257 @@ person's explicitly conveyed acceptance of that exact version. The dashboard off
 Accept this revision in Story details. Acceptance records timestamp and artifact hash,
 and appears in shared story state/events. It does not change model checks, select a
 version, accept later revisions, modify exports, authorize work or grant publication.
+
+
+## Supplied presentation media and portable delivery
+
+Read `stories import-media --help`, `resize-media --help`, `revise-media --help`
+and `get-media --help`. Import explicit local `path` or `data_base64` with name,
+MIME type and optional attribution. The returned asset ID is retained with exact
+bytes. PNG/JPEG/WebP/GIF, MP4/WebM and UTF-8 WebVTT are supported; video inspection
+requires ffprobe from ffmpeg. Imports do not fetch URLs or call a model.
+
+Pass `asset_ids` to `create-story` or `generate` (presentations only). Reference them
+as `<img src="asset:ASSET_ID" alt="Description">` or
+`<video controls src="asset:VIDEO_ID" poster="asset:IMAGE_ID"></video>` with a
+visible caption. A WebVTT track uses `<track kind="captions" src="asset:TRACK_ID"
+srclang="en" label="English">` inside the video; use the actual language.
+Metadata/descriptions do not establish that Stories inspected a clip's contents.
+Generation/review sends rendered images and posters to the configured model, not
+video/audio streams. Every revision retains its asset bindings and delivery hash.
+
+Large image warnings appear above 2 MiB or 2560×1440 dimensions (twice the review
+canvas). Explain keep-original, explicitly resized-copy and ZIP choices. Never call
+resize-media without a selected resize. It creates a PNG derivative of a still image,
+retains attribution/provenance and leaves the original intact. `revise-media` accepts
+the complete desired asset_ids and optional replacement HTML; it creates an
+unreviewed, unaccepted revision rather than modifying the base.
+
+HTML export embeds referenced images unchanged. Video or captions require ZIP;
+ZIP contains index.html, assets/, manifest.json and extraction instructions. Extract
+and open index.html with assets/ alongside it. Static media packages reject source
+scripts, frames, external stylesheets and CSS resource URLs rather than claiming to
+bundle them. Images and video loaded in the local workspace have been browser-tested;
+file:// playback from an extracted package is not yet verified. Codec compatibility
+is browser-dependent. Imported scripted HTML without retained media exports unchanged,
+with unretained media references disclosed; ZIP refuses missing media.
+
+Operational budgets: 32 MiB markup parsing, 256 MiB per media asset, 40 million
+pixels per image, 100 attached assets, 64 MiB encoded images per static rendering.
+These are separate budgets; the old 2 MB total-HTML restriction is removed. Video
+bytes stay outside model context and static rendering. Animated image review sees
+only a static frame. Silent static-slide video export is available through export-video.
+
+Presentation HTML and ZIP exports include standalone slide navigation when the
+revision has no scripts: previous/next buttons, arrow and Page Up/Down keys,
+Home/End, and viewport scaling. Imported scripted decks retain their own controls.
+Structured document exports remain scrolling documents. No Stories service is needed.
+
+## Storyboards and user-directed comparison
+
+`generate-storyboard` develops one direction from `title`, `idea`, `audience`, a
+finite `grant` and `request_id`. Optional `sources` may be empty for explicitly
+creative work. Do not turn uncertainty into automatic alternatives: set `explore`
+to true only when the person asks to explore or compare approaches. Two directions
+then share one deadline and at most 12 model calls, with one repair per candidate.
+The configured Amplifier Agent provider receives supplied context and rendered
+review images. No new image-generation provider is invoked by storyboard work.
+
+Use `fidelity`: `outline` (default), `mixed`, or `illustrated`. Panels can reference
+supplied retained still images through `asset_id`; visual descriptions with an empty
+asset ID remain visibly planned. Illustrated delivery requires images for every
+panel. Missing images may lead to clarification or explicit failure, never fabricated
+asset IDs. Image generation across formats is still a separate planned capability.
+
+The structured `storyboard` used by `create-storyboard` and `revise-storyboard` is:
+
+```json
+{"name":"Follow the request","approach":"A concrete journey","tradeoff":"Less system detail","panels":[{"id":"arrival","title":"A request arrives","action":"A fictional team receives a request.","visual":"Sketch of a request card","asset_id":"","narration":"","notes":"","evidence_ids":[]}]}
+```
+
+There are 1–8 panels per direction. Keep IDs stable when reordering or revising.
+`create-storyboard` imports this structure without a model. `revise-storyboard`
+retains explicit edits and optional replacement `asset_ids`; `new_direction=true`
+creates an explicitly requested alternative from the identified base. Ordinary edits
+require the latest revision of that direction; old revisions are preserved.
+
+`get-comparison` reads one or two `revision_ids` in the same story, or the latest
+heads by default. It works with storyboard, document and presentation previews,
+without implying matching page counts. The dashboard's Compare action supports
+side-by-side inspection and Focus & comment; neither chooses a direction. Only
+`select-direction` records a choice. Selection is not acceptance or model authority.
+Generating alternative documents or presentations remains deferred.
+
+Read `get-operation`: initial questions use `answer-question` with fresh bounded
+authority; comments use the existing feedback grant. `partial` means some requested
+directions failed. Inspect `result.revision_ids`, `failures` and `review_attempts`;
+failed candidate submissions are retained for diagnosis. The CLI exits nonzero for
+partial execution. Never retry an acknowledged request to restart spending.
+
+`update-storyboard-brief` accepts `brief` with `intent`, `assumptions` and
+`open_questions`; it retains prior briefs and marks old directions superseded without
+generation. Comment-driven revision can apply the new brief under existing authority;
+other directions remain superseded. In-flight old-brief work cannot commit.
+
+Storyboard HTML is a review-only export. ZIP includes `index.html`, editable
+`storyboard.json`, a delivery manifest and exact referenced assets. Planned images
+remain planned; required assets are verified. Storyboards do not export finished
+video, animation, speech, PDF or Word. Model review is not human acceptance, proof
+of meaningful alternatives, or evidence that an audience understood the sequence.
+
+### Optional production requirements
+
+Panels may include `production_requirements`: up to four short strings (500 characters
+each) describing the assets or work needed, their communication purpose and relevant
+constraints. Omit the field or use `[]` for ordinary outlines. Request these requirements
+when preparing a portable handoff. They are included in review HTML and structured ZIP
+exports; there are no statuses, assignees, dependency tracking or required return to
+Stories. Tool selection and execution remain with the caller. Requirements describe
+what to produce, not a claim that footage, narration or animation already exists.
+
+Storyboard execution may correct one malformed candidate submission within the same
+shared call and time limits. Schema-declared JSON containers returned as encoded text
+are decoded before validation; invalid content is never committed merely because it
+can be parsed.
+## Silent video delivery
+
+`export-video` / `Stories.export_video` writes a static presentation to 1280×720,
+30-fps H.264 MP4. Supply the exact story/revision, a new `.mp4` output path and
+`slide_seconds` (one positive duration per slide aligned to 30 fps). Requires
+Pango, ffmpeg with libx264, and ffprobe on PATH; `brew install ffmpeg` on macOS.
+Without a narration ID there is no audio track. Notes are retained as provenance; timing
+is explicit rather than estimated. Scripts, CSS animation, animated images and
+embedded clips are rejected. Use HTML/ZIP for interactive or playable media.
+
+The result identifies output/source hashes, assets, timing and separate decode,
+duration and no-audio checks. Successful exports retain this record in a
+`video_exported` change event. Visual review and acceptance do not transfer from
+the deck. `timeout_seconds` bounds work (default 300, 1–900); interruption stops
+subprocesses and cleans temporary files. Existing outputs are never overwritten.
+Encoding is synchronous and does not perform speech synthesis.
+
+
+## Narrated delivery
+
+Use `narration-settings` and `configure-narration` for store-scoped speech settings,
+separate from writing settings. Providers: `openai` (`OPENAI_API_KEY`, defaults
+`gpt-4o-mini-tts` / `marin`) and `gemini` (`GOOGLE_API_KEY` then `GEMINI_API_KEY`,
+defaults `gemini-2.5-flash-preview-tts` / `Kore`). Key presence is not verified speech
+access; Anthropic, ChatGPT and Copilot authentication do not authorize these APIs.
+Speech goes directly to the provider, without an Amplifier Agent session.
+
+`generate-narration` requires exact story/revision, a request ID and a speech grant
+(`max_requests`, `max_characters`, `timeout_seconds`; defaults 12 / 24000 / 300,
+maxima 100 / 200000 / 900). New speech also requires `--model-env`. Omitted `notes`
+reads each slide's `.notes` or `[data-speaker-notes]`; supplied `notes` is one string
+per slide and is retained as an explicit adaptation. Each must be nonempty and at
+most 4000 characters. Do not invent missing notes or silently rewrite them.
+
+Poll the returned operation with `get-operation`; cancel with `cancel-operation`.
+`get-speaker-notes`, `list-narrations`, `get-narration` and `get-narration-audio`
+provide deterministic inspection. Completed slide audio survives partial failure.
+Exact request retries do not spend again. Reuse is keyed by text and frozen speech
+settings; only changed clips require synthesis. Uncertain attempts require a new
+request ID and explicit `retry_uncertain: true`; do not retry blindly. Cancellation
+cannot reverse a provider charge already in flight. Audio is disclosed as AI-generated.
+
+Pass the completed `narration_id` to `export-video`. Default `delivery: "embedded"`
+produces MP4 with AAC audio; `delivery: "separate"` requires a new `.zip` path and
+packages silent MP4, a full aligned WAV, original slide WAVs, notes/settings/timing
+manifest and README. Both use the same retained audio and render plan, without
+new synthesis or credentials. Actual speech duration plus `pause_seconds` (default
+0.5, allowed 0–60) determines whole-frame timing. Optional `slide_seconds` must fit
+speech and pause; conflicts fail without truncating or accelerating speech.
+The original revision, audio and timing remain retained. Static video limitations
+still apply. Audio decoding is not a listening or pronunciation-quality check.
+
+The dashboard's **Narration & video** dialog provides the same settings, explicit
+notes adaptation, generation/cancellation, audio listening and two export modes.
+Its generation grant is 12 requests / 48000 characters / 300 seconds. The viewer
+needs provider-use authority for uncached speech. Exports require no new API calls.
+
+
+## Preparing narration independently of speech
+
+Use `prepare-narration` when a narrated video needs a spoken story, or when the caller
+wants a script alone. This is optional; normal presentation generation need not
+produce a voiceover. Uses the writing provider through Amplifier Agent, independently
+of configured speech provider/key. Inputs are exact story/revision, ordinary writing
+`grant`, request ID, optional `guidance`, approximate `target_seconds` and
+`base_script_id` for refinement. Optional `draft_notes` supplies current editable
+passages, including gaps, without discarding unsaved text. Native writing-provider access and model authority
+are required. The whole selected deck, notes and retained sources are disclosed to
+that provider. Background mode runs immediately; queued mode needs `run-operation`.
+
+Defaults establish audience relevance, add explanation beyond bullet recitation,
+connect the slides and end with a useful takeaway. Spoken language, supported
+examples and content-led pacing serve the purpose; a dramatic or sales structure
+is not mandatory. Presenter cues are adapted, not read aloud. No invented motives,
+experiences, benefits or image observations. User guidance steers tone, emphasis
+and length. A duration estimate at 140 words/minute is not measured audio timing.
+
+Poll the returned operation, then read result.script_id with `get-narration-script`.
+`list-narration-scripts` lists retained versions. Each has ordered passages,
+references, limitations, source revision, guidance and review. Composition and
+source-fidelity/spoken-story model review permit at most one repair and re-review
+(up to four calls within the writing grant). Failed candidates remain inspectable;
+model review is not human approval, a listening test or independent truth.
+
+`save-narration-script` retains explicit text edits without a model; edits create a
+new identity and invalidate prior review. Preparing/refining leaves slides, speaker
+notes, earlier scripts and audio intact. Pass `script_id` to `generate-narration` to
+speak its exact text; do not also pass `notes`. Synthesis and video retain the script
+identity/hash. Existing verbatim notes input remains available for finished scripts.
+No new approval ceremony is required between steps when the caller has authorized
+the full narrated export. The dashboard exposes preparation, guidance, versions,
+manual editing and synthesis separately, using these same public capabilities.
+
+
+Speech synthesis runs up to three distinct slide requests concurrently by default.
+Set `concurrency` (1–8) on `generate-narration` to change that limit. All requests
+share the same total request/character budget and operation deadline. Identical
+text and voice settings within a run share one synthesis request. Completed audio
+is retained by its actual slide number, even when earlier slides fail or finish
+later; video assembly uses slide order. One failed request does not discard or
+cancel successful work on other slides. Cancellation stops all active requests
+and prevents waiting work from starting; in-flight provider charges may still occur.
+
+
+Storyboard reliability: Anthropic and OpenAI API submissions request native strict
+schemas through Amplifier; other adapters retain their supported tool-submission
+behavior. Storyboard responses are also schema-validated locally, with at most one
+structured correction per submission within the shared 12-call operation limit.
+Generation can produce a storyboard or ask for clarification, not return an answer
+in place of the requested artifact. Strict structure is not evidence of factual or
+creative quality. Review receives code-computed narration counts and provisional
+spoken-time estimates, not model-estimated word counts. Printed storyboard sheets begin with a separate direction overview,
+then the panel sequence. Production requirements stay optional and concise; timing
+is a provisional narration/visual budget, not a promise of produced video duration.
+
+## Optional MCP / MCP Apps
+
+Install `amplifier-smart-tool-stories[mcp]` from this Git repository and run
+`stories-mcp --storage /explicit/store`. Add `--model-env` only with authority to
+use configured providers; generation still requires a bounded grant. Tool schemas
+and the optional `ui://stories/review` App use the same public library and state.
+Read shared drafts before continuing. Comments default to agent notes; `author=user`
+is caller-reported human submission, not authenticated identity. The portable
+adapter omits native human acceptance, login, runtime preparation and video export.
+Media/audio/export getters return scoped, bounded MCP resource chunks; export
+transfer snapshots expire when the MCP server stops. The native library/CLI remains
+available for durable file exports. No MCP sampling, Tasks or caller wake-up is
+implied. See the repository's `docs/MCP.md` for supported scope and host requirements.
+
+Portable navigation is shared library state. Read `get-review-view`, then
+`update-review-view` with its exact `expected_version`, a stable request ID and
+revision/one-based slide/comparison/anchor/panel/sections/export-format changes.
+Conflicts require rereading and reconciling; viewing never selects a direction,
+accepts content or grants work. The App follows these changes and restores them
+on reopen. Audio playback/volume, scroll, download handling and grant form drafts
+remain local presentation controls; their domain actions remain public tools.
+
+`respond` preserves the original annotation target and accepts explicit `author`.
+Library/CLI retain their user-submission default for compatibility; the portable
+MCP adapter defaults both `add_comment` and `respond` to agent notes, which never
+consume feedback authority. User attribution is a caller assertion, not proof of
+human identity.
