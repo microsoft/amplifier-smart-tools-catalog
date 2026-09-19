@@ -112,11 +112,12 @@ revision you want. Copy the skill again if needed; a symlink reads that checkout
 To stop composing the behavior into future App CLI sessions, run:
 
 ```bash
-amplifier bundle remove smart-tools-catalog-behavior --app
+amplifier bundle remove 'git+https://github.com/microsoft/amplifier-smart-tools-catalog@main#subdirectory=behaviors/smart-tools-catalog.yaml' --app
 ```
 
 Removal unregisters future composition; it does not uninstall Smart Tool
-programs or promise deletion of a cached remote skill.
+programs or promise deletion of a cached remote skill. Use the same URI you
+registered if you chose a different revision.
 
 Skill updates are separate from catalog refreshes. The GitHub Action refreshes
 catalog snapshots; updating the skill gets changes to the discovery instructions.
@@ -142,7 +143,9 @@ the last refresh succeeded, not that the snapshot is currently fresh. Failed
 source refreshes preserve the previous snapshot and appear in the action logs.
 
 This repo does not provide an installer or validation kit.
-The snapshot-first skill has not yet been exercised across hosts.
+Remote skill installation and a read-only workflow using an explicitly supplied
+local catalog have been exercised in an isolated Amplifier App CLI environment.
+Other coding hosts remain unverified.
 
 </details>
 

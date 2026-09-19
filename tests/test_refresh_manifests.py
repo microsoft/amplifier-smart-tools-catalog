@@ -91,9 +91,12 @@ class RefreshManifestsTests(unittest.TestCase):
         self.assertIn("The Amplifier App CLI already provides Skills.", readme)
         self.assertIn("can refresh other eligible\nAmplifier sources as well, so it is not a catalog-only update.", readme)
         self.assertIn(
-            "amplifier bundle remove smart-tools-catalog-behavior --app",
+            "amplifier bundle remove 'git+https://github.com/microsoft/"
+            "amplifier-smart-tools-catalog@main#subdirectory=behaviors/"
+            "smart-tools-catalog.yaml' --app",
             readme,
         )
+        self.assertNotIn("amplifier bundle remove smart-tools-catalog-behavior --app", readme)
         self.assertNotIn("and enable its skills capability", readme)
 
     def test_catalog_branding_uses_the_microsoft_repository_and_skill_name(self) -> None:
