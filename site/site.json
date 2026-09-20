@@ -1,0 +1,7 @@
+{
+  "kind": "catalog",
+  "key": "catalog",
+  "title": "Catalog | Amplifier Smart Tools",
+  "description": "Find Amplifier Smart Tools by their capabilities, use cases, and declared platforms.",
+  "install": "npx skills add microsoft/amplifier-smart-tools-catalog \\\n  --skill amplifier-smart-tools-catalog \\\n  --agent claude-code codex github-copilot"
+}

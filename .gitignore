@@ -1,3 +1,6 @@
 .converge/
 __pycache__/
 *.py[cod]
+
+# Generated GitHub Pages output
+/_site/
