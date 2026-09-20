@@ -1,14 +1,14 @@
 ---
 smart_tool_format: 1
 name: deep-research
-version: 0.9.0
+version: 0.10.0
 description: >
-  Researches a question across many sources and comes back with a short brief plus the citations behind it. Reach for it when the ask sounds like "what do we actually know about X?", "find me sources on this", "is this approach still the consensus?", "what are the options here and who says so?", or "I need to decide this and I have not read anything yet". Searches the live web, reads what it finds, and synthesises -- the answer is a brief plus a pointer to the full evidence kept on disk, so a result too large to hold in one reply can still be navigated, re-read and answered against later. Use it before committing to a decision, to get a short answer with its sources attached without reading them first, or to build a durable evidence record. Do NOT use it to check specific claims you already have -- that is fact-check -- or for questions answerable from the code or documents already in front of you.
+  Researches a question across many sources and returns a short brief plus the citations behind it. Reach for it when the ask sounds like "what do we actually know about X?", "find me sources on this", or "I need to decide this and have not read anything yet". Searches the live web and synthesises, returning a brief plus a pointer to the full evidence kept on disk. Do NOT use it to check specific claims you already have -- that is fact-check -- or for questions answerable from the code or documents already in front of you.
 use_cases:
-  - Find out what is actually known about a question before committing to a decision
-  - Get a short answer with the sources behind it, without reading the sources first
-  - Build a durable evidence record that later questions can be answered against
-  - Produce a bibliography for a topic without collecting the references by hand
+  - Find out what is known before committing to a decision
+  - Get a short sourced answer without reading the sources first
+  - Build a durable evidence record for later questions
+  - Produce a bibliography without collecting references by hand
 platforms:
   - linux
   - macos
@@ -28,18 +28,36 @@ requires:
       Backs the reasoning stages that scope a question and synthesise the gathered
       evidence. Without it the research verb refuses rather than degrading, so what is
       lost is research itself; every deterministic verb -- reading, filtering,
-      re-rendering and listing runs that already exist -- keeps working. Any one of
-      ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY or
-      AZURE_OPENAI_API_KEY satisfies it. This tool stores no credentials of its own.
+      re-rendering and listing runs that already exist -- keeps working. Needs BOTH a
+      resolvable credential AND that provider's client library installed -- a credential
+      alone does not satisfy preflight. ANTHROPIC_API_KEY is satisfied out of the box:
+      this tool installs the `anthropic` client by default. OPENAI_API_KEY,
+      AZURE_OPENAI_API_KEY or a GitHub Copilot credential additionally need the
+      `research-core[agent-openai]` extra (or `pip install openai`); GOOGLE_API_KEY or
+      GEMINI_API_KEY additionally need `research-core[agent-gemini]` (or
+      `pip install google-genai`). This tool stores no credentials of its own.
+    optional: true
+    install: docs/CONFIGURATION.md
+  - name: engine-home
+    purpose: >
+      A writable directory for the embedded engine's own cache, module clones and
+      per-turn working directories -- $AMPLIFIER_AGENT_HOME if set, else
+      ~/.amplifier-agent. Checked as part of preflight for the research verb,
+      alongside ai-provider: without a writable one the run refuses before it starts,
+      naming the path and the setting that moves it, rather than failing with a bare
+      filesystem error after evidence has already been gathered. Every deterministic
+      verb keeps working regardless. Run `deep-research check` to see whether this
+      host has it.
     optional: true
     install: docs/CONFIGURATION.md
 ---
 
 # deep-research
 
-One library, one thin `deep-research` CLI. Every response is a single JSON document on
-stdout; failures are a JSON error envelope carrying `code`, `message` and `remedy`, with
-a non-zero exit. Diagnostics and progress go to stderr.
+One library, one thin `deep-research` CLI. Every response is a single JSON document: a
+success is on stdout; a failure -- a JSON error envelope carrying `code`, `message` and
+`remedy`, with a non-zero exit -- is on stderr, with stdout left empty. Diagnostics and
+progress also go to stderr, on both success and failure.
 
 ## What it is good at
 
@@ -57,9 +75,11 @@ brief says so, and confidence is stated rather than implied.
 
 ## Straight and smart paths
 
-`manifest` is deterministic and runs with no provider configured. The model-backed verbs
-consume tokens, may answer differently on a second run, and fail saying so when nothing
-is configured.
+`manifest`, `check`, `config`, `list`, `status`, `read`, `sources`, `render`, `classify` and
+`estimate` are deterministic and run with no provider configured. `research` is
+model-backed: it consumes tokens, may answer differently on a second run, and fails saying
+so when nothing is configured rather than returning a lesser answer.
 
-This version ships the manifest verb only; the research and navigation verbs named in
-`contracts/cli.v1.md` arrive next.
+This tool ships its full operational surface today: the manifest verb, the research verb,
+and the deterministic navigation verbs named in `contracts/cli.v1.md`. `<verb> --help`
+documents each one; `skill` renders the whole tool as an Agent Skill.

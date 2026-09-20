@@ -1,14 +1,14 @@
 ---
 smart_tool_format: 1
 name: fact-check
-version: 0.9.0
+version: 0.10.0
 description: >
-  Takes things someone has asserted and checks each one against evidence, returning a verdict per claim -- supported, refuted, unverifiable or opinion -- with the sources each rests on. Reach for it when the ask sounds like "is any of this actually true?", "check the claims in this draft before it goes out", "he says X, is that right?", "which parts of this hold up?", or "where did that number come from?". Claims are checked INDEPENDENTLY, so one false claim does not condemn the rest of a document, and a single verdict can be audited down to the sources under it. Use it on a draft before it ships, on a page or a transcript full of assertions, or to re-check claims against evidence an earlier research run already gathered. Do NOT use it for an open question with no claim in it yet -- that is deep-research -- or to check code against its tests.
+  Takes things someone has asserted and checks each one against evidence, returning a verdict per claim -- supported, refuted, unverifiable or opinion -- with the sources each rests on. Reach for it when the ask sounds like "is any of this actually true?", "check the claims in this draft before it goes out", or "where did that number come from?". Claims are checked INDEPENDENTLY, so one false claim does not condemn the rest of a document. Do NOT use it for an open question with no claim in it yet -- that is deep-research -- or to check code against its tests.
 use_cases:
-  - Check the claims in a document or a draft before it goes out
-  - Find which of several assertions actually hold, and which merely sound right
-  - Audit a single verdict down to the sources it rests on
-  - Re-check claims against evidence a previous research run already gathered
+  - Check the claims in a draft before it goes out
+  - Find which assertions hold and which merely sound right
+  - Audit a single verdict down to its sources
+  - Re-check claims against evidence a previous research run gathered
 platforms:
   - linux
   - macos
@@ -28,18 +28,36 @@ requires:
       Backs the stages that sort claims by type and weigh evidence against each one.
       Without it no claim can be checked and the verb refuses rather than guessing, so
       what is lost is checking itself; reading, filtering and re-rendering runs that
-      already exist keeps working. Any one of ANTHROPIC_API_KEY, OPENAI_API_KEY,
-      GOOGLE_API_KEY, GEMINI_API_KEY or AZURE_OPENAI_API_KEY satisfies it. This tool
-      stores no credentials of its own.
+      already exist keeps working. Needs BOTH a resolvable credential AND that
+      provider's client library installed -- a credential alone does not satisfy
+      preflight. ANTHROPIC_API_KEY is satisfied out of the box: this tool installs the
+      `anthropic` client by default. OPENAI_API_KEY, AZURE_OPENAI_API_KEY or a GitHub
+      Copilot credential additionally need the `research-core[agent-openai]` extra (or
+      `pip install openai`); GOOGLE_API_KEY or GEMINI_API_KEY additionally need
+      `research-core[agent-gemini]` (or `pip install google-genai`). This tool stores no
+      credentials of its own.
+    optional: true
+    install: docs/CONFIGURATION.md
+  - name: engine-home
+    purpose: >
+      A writable directory for the embedded engine's own cache, module clones and
+      per-turn working directories -- $AMPLIFIER_AGENT_HOME if set, else
+      ~/.amplifier-agent. Checked as part of preflight for check-claims, alongside
+      ai-provider: without a writable one the run refuses before it starts, naming
+      the path and the setting that moves it, rather than failing with a bare
+      filesystem error after evidence has already been gathered. Every deterministic
+      verb keeps working regardless. Run `fact-check check` to see whether this host
+      has it.
     optional: true
     install: docs/CONFIGURATION.md
 ---
 
 # fact-check
 
-One library, one thin `fact-check` CLI. Every response is a single JSON document on
-stdout; failures are a JSON error envelope carrying `code`, `message` and `remedy`, with
-a non-zero exit. Diagnostics and progress go to stderr.
+One library, one thin `fact-check` CLI. Every response is a single JSON document: a
+success is on stdout; a failure -- a JSON error envelope carrying `code`, `message` and
+`remedy`, with a non-zero exit -- is on stderr, with stdout left empty. Diagnostics and
+progress also go to stderr, on both success and failure.
 
 ## What it is good at
 
@@ -61,9 +79,11 @@ adequate evidence was found either way. It is never reported as `refuted`.
 
 ## Straight and smart paths
 
-`manifest` is deterministic and runs with no provider configured. The model-backed verbs
-consume tokens, may answer differently on a second run, and fail saying so when nothing
-is configured.
+`manifest`, `check`, `config`, `list`, `status`, `read`, `sources`, `render`, `verdicts`,
+`classify` and `estimate` are deterministic and run with no provider configured.
+`check-claims` is model-backed: it consumes tokens, may answer differently on a second
+run, and fails saying so when nothing is configured rather than guessing.
 
-This version ships the manifest verb only; the verbs named in `contracts/cli.v1.md`
-arrive next.
+This tool ships its full operational surface today: the manifest verb, `check-claims`, and
+the deterministic navigation verbs named in `contracts/cli.v1.md`. `<verb> --help`
+documents each one; `skill` renders the whole tool as an Agent Skill.
