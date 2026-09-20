@@ -1,5 +1,7 @@
 # Amplifier Smart Tools Catalog
 
+[Website source and preview instructions](site/README.md)
+
 A catalog and one shared skill for finding Amplifier Smart Tools from your
 coding agent. Browse [the catalog](tools/) or install the
 [discovery skill](skills/amplifier-smart-tools-catalog/SKILL.md).
