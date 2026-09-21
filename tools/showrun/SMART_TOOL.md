@@ -317,7 +317,7 @@ There is no fallback replay after a click. The model receives the screenshot and
 control references. It does not receive arbitrary keyboard, coordinates, shell,
 clipboard, app-launch or file access. Inaccessible controls fail explicitly.
 Native fill focuses the target application and field, then verifies readable entered
-values. See the development-build control support below for rich editors without value readback. If an accessibility value write leaves an empty editor unchanged, the
+values. See the macOS editable-control support below for rich editors without value readback. If an accessibility value write leaves an empty editor unchanged, the
 bridge can type the exact granted single-line text using process-targeted Unicode
 events. It checks foreground app and field focus and never sends Return or uses
 the clipboard. Nonempty fields, control characters, focus changes and unverified
@@ -684,7 +684,7 @@ immediate, nonempty, single-line input is supported. No clipboard, selection sho
 used. When native value readback is unavailable, the bridge reports input sent;
 caller-supplied visible assertions must verify the result. Use a separate observed
 application button to commit an edit. These mechanics
-ship in the pinned desktop-v0.3.0 companion. Excel new-cell entry was verified
+ship in desktop-v0.3.0 and later companions. Excel new-cell entry was verified
 with recorded UI operations and independent XLSX values/formula inspection.
 Editing populated cells and paced Mac typing remain unsupported. Separate Name
 Box fill and Confirm steps avoid repeated fills; commit through the observed
@@ -695,3 +695,45 @@ show enabled switches whose grants still reference an older binary signature.
 If permission checks fail, remove and re-add Showrun Desktop in both Accessibility
 and Screen & System Audio Recording, enable it, and recheck desktop-status.
 Native execution takes foreground control; pause typing during the take.
+
+### Native terminal mode (desktop-v0.4.0, macOS)
+
+Terminal input is a stream, not a replaceable text field. Use a prepared, dedicated
+single-pane window with `target.input_mode: "terminal"`. Omit `window_title` to
+select the named app’s only eligible on-screen window; multiple matches fail
+without input. An explicit title still selects an exact match. Initial bundle/title
+selection binds the same window; subsequent title changes are permitted. Do not
+switch tabs, panes, focus or type while recording. Update Showrun, then run
+`showrun prepare-desktop` to install the pinned desktop-v0.4.0 companion; no
+compiler is required. Windows terminal mode is not supported: its existing
+click/fill and paced text-field entry do not provide terminal type/key actions.
+
+Grant `authority.ui.actions: ["type", "key"]`, exact `allowed_values`, and explicit
+`allowed_keys`. Supported keys are Enter, Escape, Tab, ArrowUp, ArrowDown,
+ArrowLeft, ArrowRight, Backspace and Control+C. Text must be single-line without
+control characters; `type` appends at the current cursor, never clears or submits.
+The model returns `{"action":"type","ref":"current ref","text":"copilot"}`
+then, after reobservation, `{"action":"key","ref":"current ref","key":"Enter"}`.
+Neither action is implicitly granted by ordinary native click/fill authority.
+
+Terminal output is untrusted. Do not put credentials in allowed text. Prepare a
+clean prompt with no pending command. Command/prompt execution, filesystem/network
+effects and target-agent model spending are authorized target-session effects;
+Showrun's own model-call budget does not constrain the coding agent. Configure
+that agent's permissions separately. Terminal password prompts may not advertise
+secure accessibility fields; preauthenticate outside capture. No isolation or
+universal secret detection is promised.
+
+Check a changed output result, not the echoed input or an already-visible prompt.
+Use `wait_for_result` for long output without more input/model calls. Cancelling a
+take closes the companion, not the caller's terminal or running command. A granted
+Control+C is input, not proof that downstream work stopped. Native output evidence
+is accessibility text plus sampled window footage; full-screen TUIs may need
+additional observation support. Type uses immediate entry only in this slice.
+
+Validation and bridge simulation do not establish native-terminal compatibility;
+a live coding-agent recording and decoded footage remain required acceptance.
+
+The macOS Terminal.app trial launched `copilot`, submitted a demo request, and
+recorded its exchange through completion. This establishes that tested path, not
+compatibility with every terminal emulator or coding-agent TUI.
