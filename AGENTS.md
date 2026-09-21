@@ -12,7 +12,9 @@ product behavior. Draft status is not evidence of approval or working software.
 
 ## Keep it small
 
-- Maintain one discovery skill, not instructions per tool.
+- The skill that reads this catalog is `amplifier-smart-tools`, maintained in
+  `microsoft/amplifier-smart-tools`. Do not add a skill here, or instructions
+  per tool.
 - Keep tool descriptions upstream. The only permitted copies are exact generated
   `SMART_TOOL.md` snapshots with provenance; never add independent descriptions.
 - Do not introduce a top-level inventory, MCP gateway, marketplace, background

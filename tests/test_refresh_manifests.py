@@ -22,113 +22,17 @@ SPEC.loader.exec_module(refresh_manifests)
 
 
 class RefreshManifestsTests(unittest.TestCase):
-    def test_catalog_root_manifest_is_identity_only(self) -> None:
-        catalog_root = SCRIPT.parents[1]
-        root = (catalog_root / "bundle.md").read_text()
-        prefix, metadata, body = root.split("---", 2)
-
-        self.assertEqual(prefix, "")
-        self.assertEqual(body.strip(), "")
-        self.assertEqual(
-            [line for line in metadata.splitlines() if line and not line.startswith(" ")],
-            ["bundle:"],
-        )
-        self.assertEqual(
-            [line.strip().split(":", 1)[0] for line in metadata.splitlines() if line.startswith("  ")],
-            ["name", "version", "description"],
-        )
-        self.assertIn("  name: smart-tools-catalog\n", metadata)
-        self.assertIn("behaviors/smart-tools-catalog.yaml", metadata)
-
-    def test_smart_tools_catalog_behavior_configures_one_remote_skill_without_source(self) -> None:
-        catalog_root = SCRIPT.parents[1]
-        behavior = (catalog_root / "behaviors" / "smart-tools-catalog.yaml").read_text().rstrip("\n")
-
-        self.assertEqual(
-            behavior,
-            "\n".join(
-                (
-                    "bundle:",
-                    "  name: smart-tools-catalog-behavior",
-                    "  version: 0.1.0",
-                    "  description: Adds the Smart Tools Catalog discovery skill to an existing Skills-equipped host.",
-                    "",
-                    "tools:",
-                    "  - module: tool-skills",
-                    "    config:",
-                    "      skills:",
-                    '        - "git+https://github.com/microsoft/amplifier-smart-tools-catalog@main#subdirectory=skills"',
-                )
-            ),
-        )
-        for prohibited_key in (
-            "source:",
-            "include:",
-            "includes:",
-            "provider:",
-            "providers:",
-            "session:",
-            "sessions:",
-            "context:",
-            "body:",
-            "agent:",
-            "agents:",
-            "root_manifest:",
-        ):
-            self.assertNotIn(prohibited_key, behavior)
-
-    def test_readme_documents_amplifier_behavior_lifecycle(self) -> None:
+    def test_catalog_points_at_the_shared_skill_and_ships_none_of_its_own(self) -> None:
         catalog_root = SCRIPT.parents[1]
         readme = (catalog_root / "README.md").read_text()
 
+        self.assertIn("npx skills add microsoft/amplifier-smart-tools\n", readme)
         self.assertIn(
-            "amplifier bundle add 'git+https://github.com/microsoft/"
-            "amplifier-smart-tools-catalog@main#subdirectory=behaviors/"
-            "smart-tools-catalog.yaml' --app",
+            "https://github.com/microsoft/amplifier-smart-tools/blob/main/skills/amplifier-smart-tools/SKILL.md",
             readme,
         )
-        self.assertIn("This is user-wide and composes the behavior into every new Amplifier session;", readme)
-        self.assertIn("The Amplifier App CLI already provides Skills.", readme)
-        self.assertIn("can refresh other eligible\nAmplifier sources as well, so it is not a catalog-only update.", readme)
-        self.assertIn(
-            "amplifier bundle remove 'git+https://github.com/microsoft/"
-            "amplifier-smart-tools-catalog@main#subdirectory=behaviors/"
-            "smart-tools-catalog.yaml' --app",
-            readme,
-        )
-        self.assertNotIn("amplifier bundle remove smart-tools-catalog-behavior --app", readme)
-        self.assertNotIn("and enable its skills capability", readme)
-
-    def test_catalog_branding_uses_the_microsoft_repository_and_skill_name(self) -> None:
-        catalog_root = SCRIPT.parents[1]
-        skill_name = "amplifier-smart-tools-catalog"
-        intermediate_skill_name = "amplifier-smart" + "-tools"
-        old_repository_name = "amplifier-tools" + "-smart-catalog"
-        skill_file = catalog_root / "skills" / skill_name / "SKILL.md"
-
-        self.assertEqual(list((catalog_root / "skills").glob("*/SKILL.md")), [skill_file])
-        skill_text = skill_file.read_text()
-        self.assertIn(f"name: {skill_name}", skill_text)
-        self.assertIn("# Amplifier Smart Tools Catalog", skill_text)
-        self.assertIn(
-            "https://github.com/microsoft/amplifier-smart-tools-catalog", skill_text
-        )
-
-        readme = (catalog_root / "README.md").read_text()
-        self.assertIn(f"microsoft/amplifier-smart-tools-catalog", readme)
-        self.assertIn(f"--skill {skill_name}", readme)
-        self.assertIn(f"skills/{skill_name}/", readme)
-        self.assertIn(f"npx skills update {skill_name}", readme)
-        self.assertNotIn(old_repository_name, readme)
-
-        discovery_contract = (catalog_root / "contracts" / "discovery.v1.md").read_text()
-        self.assertIn(f"skills/{skill_name}/SKILL.md", discovery_contract)
-        self.assertIn(f"`{skill_name}`", discovery_contract)
-        self.assertNotIn(old_repository_name, discovery_contract)
-        self.assertNotRegex(
-            "\n".join((readme, discovery_contract, skill_text)),
-            rf"(?:name: |--skill |skills/){intermediate_skill_name}(?!-catalog)(?=[\s/`]|$)",
-        )
+        for removed in ("skills", "behaviors", "bundle.md"):
+            self.assertFalse((catalog_root / removed).exists(), removed)
 
     def test_repository_readiness_files_describe_the_minimal_contribution_flow(self) -> None:
         catalog_root = SCRIPT.parents[1]

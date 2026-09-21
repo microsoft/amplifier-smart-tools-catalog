@@ -6,10 +6,11 @@ hosts and tool authors relying on their own help being used.
 ## What it looks like
 
 One installed skill discovers the relevant source and learns from the tool.
-The shared skill lives at the following package location.
+The shared skill is `amplifier-smart-tools`, maintained in the specification
+repository at the following location.
 
 ```text
-skills/amplifier-smart-tools-catalog/SKILL.md
+https://github.com/microsoft/amplifier-smart-tools/blob/main/skills/amplifier-smart-tools/SKILL.md
 ```
 
 A person asks whether this machine is ready to use DTU. The agent finds its
@@ -25,7 +26,7 @@ its invocation details.
 
 ## Core (the teeth)
 
-1. **One skill serves all entries.** `amplifier-smart-tools-catalog` uses the
+1. **One skill serves all entries.** `amplifier-smart-tools` uses the
    catalog source contract rather than requiring a skill per tool or hard-coded
    operation instructions for each entry. It allows only exact generated manifest
    snapshots with provenance, never independent tool descriptions.

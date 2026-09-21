@@ -13,6 +13,8 @@ THEME = Path(__file__).resolve().parent
 FAMILY = json.loads((THEME / 'family.json').read_text())
 PAGES = FAMILY['pages']
 SPEC = 'https://github.com/microsoft/amplifier-smart-tools/tree/main/spec'
+SKILL_INSTALL = 'npx skills add microsoft/amplifier-smart-tools'
+SKILL_PATH = '/blob/main/skills/amplifier-smart-tools/SKILL.md'
 
 
 def plain(value):
@@ -107,19 +109,32 @@ def overview(config, args):
       {code_box('uv run conformance/run.py path/to/your-smart-tool','From the specification checkout','conformance')}
       <p class="note">Conformance checks the format and reports checks it cannot perform. It does not certify output quality or replace product tests.</p>
     </div></section>
-    <section class="section"><div class="callout"><p class="eyebrow">The Amplifier Smart Tools catalog</p><h2>Find a tool for your work.</h2><p>The catalog is the place to explore available tools, inspect their requirements, and install the shared discovery skill for your coding agent.</p><div class="actions">{link(page_url('catalog',args),'Explore the catalog','button primary')}{link(repo_url('catalog')+'#contributing','Add your tool','text-link')}{link(repo_url('overview')+'/blob/main/ROADMAP.md','Read the roadmap','text-link')}</div></div></section>'''
+    <section class="section two-col" id="skill"><div><p class="eyebrow">Let your agent help</p><h2>One skill.<br>Find, use, build.</h2><p style="margin-top:24px">Install the Amplifier Smart Tools skill and ask your agent for a Smart Tool for your task. It reads the catalog, installs the tool, follows the tool's own help, and can scaffold a new tool when none fits.</p></div><div class="callout"><h3>Install the skill.</h3>{code_box(SKILL_INSTALL,'Terminal','install')}<p class="note">This installs guidance for your agent, not the tools or their credentials.</p>{link(repo_url('overview')+SKILL_PATH,'Read the skill','text-link')}</div></section>
+    <section class="section"><div class="callout"><p class="eyebrow">The Amplifier Smart Tools catalog</p><h2>Find a tool for your work.</h2><p>The catalog is the place to explore available tools and inspect their requirements.</p><div class="actions">{link(page_url('catalog',args),'Explore the catalog','button primary')}{link(repo_url('catalog')+'#contributing','Add your tool','text-link')}{link(repo_url('overview')+'/blob/main/ROADMAP.md','Read the roadmap','text-link')}</div></div></section>'''
 
 
 def tool_page(config, args):
     key = config['key']
     repo = repo_url(key)
     image = './assets/' + Path(config['image']).name
+    media = f'<a href="{image}" aria-label="Open full-size {esc(config["name"])} image"><img src="{image}" alt="{esc(config["alt"])}" width="{config["width"]}" height="{config["height"]}" fetchpriority="high"></a>'
+    media_link = link(image, 'View full size')
+    if config.get('video'):
+        video = './assets/' + Path(config['video']).name
+        media = f'<video data-demo-video controls muted loop playsinline preload="metadata" poster="{image}" width="{config["width"]}" height="{config["height"]}" aria-label="{esc(config["alt"])}"><source src="{video}" type="video/mp4">{link(video,"Watch the demo")}</video>'
+        media_link = f'<button class="motion-toggle" data-motion-toggle hidden type="button" aria-pressed="false">Pause motion</button> {link(video,"Watch full size")}'
+    capability_sections = ''
+    for demo in config.get('capability_demos', []):
+        demo_video = './assets/' + Path(demo['video']).name
+        demo_poster = './assets/' + Path(demo['image']).name
+        capability_sections += f'''<section class="section" id="{esc(demo['id'])}"><div class="section-heading"><div><p class="eyebrow">{esc(demo['eyebrow'])}</p><h2>{esc(demo['title'])}</h2></div><p>{esc(demo['description'])}</p></div><figure class="tool-figure"><div class="product-image"><video data-demo-video controls muted loop playsinline preload="metadata" poster="{demo_poster}" width="{demo['width']}" height="{demo['height']}" aria-label="{esc(demo['alt'])}"><source src="{demo_video}" type="video/mp4">{link(demo_video, 'Watch the demo')}</video></div><figcaption class="image-caption"><span>{esc(demo['caption'])}</span><span class="demo-actions"><button class="motion-toggle" data-motion-toggle hidden type="button" aria-pressed="false">Pause motion</button> {link(demo_video, 'Watch full size')}</span></figcaption></figure></section>'''
     steps = ''.join(f'<li><h3>{esc(t)}</h3><p>{esc(p)}</p></li>' for t,p in config['steps'])
     details = ''.join(f'<article><h3>{esc(t)}</h3><p>{esc(p)}</p></article>' for t,p in config['details'])
     return f'''<section class="hero tool-hero"><div class="hero-grid"><div><h1>{esc(config['name'])}</h1><p class="promise">{esc(config['promise'])}</p></div><div><p class="lede">{esc(config['description'])}</p><div class="actions">{link('#get-started','Get started','button primary')}{link(repo,'View on GitHub','button')}</div></div></div></section>
-    <figure class="tool-figure"><div class="product-image"><a href="{image}" aria-label="Open full-size {esc(config['name'])} image"><img src="{image}" alt="{esc(config['alt'])}" width="{config['width']}" height="{config['height']}" fetchpriority="high"></a></div><figcaption class="image-caption"><span>{esc(config['caption'])}</span>{link(image,'View full size')}</figcaption></figure>
+    <figure class="tool-figure"><div class="product-image">{media}</div><figcaption class="image-caption"><span>{esc(config['caption'])}</span><span class="demo-actions">{media_link}</span></figcaption></figure>
     <section class="section two-col"><div><p class="eyebrow">How it works</p><h2>{esc(config['flow_title'])}</h2><p style="margin-top:24px">{esc(config['flow_intro'])}</p></div><ol class="numbered">{steps}</ol></section>
     <section class="section"><div class="section-heading"><div><p class="eyebrow">Made for real work</p><h2>{esc(config['detail_title'])}</h2></div></div><div class="detail-grid">{details}</div></section>
+    {capability_sections}
     <section class="section two-col" id="get-started"><div><p class="eyebrow">Get started</p><h2>Bring it to<br>your agent.</h2><p style="margin-top:24px">Start with the outcome you want. Your agent can install the tool and use its help to carry out the work.</p>{code_box(config['prompt'],'A starting prompt','prompt')}</div><div><h3>Help your agent can use.</h3><p>Amplifier Smart Tools provide help in skill format: instructions your agent can read to understand capabilities, inputs, and how to use the tool. Ask your agent to read <code>--help</code> before getting started.</p>{code_box(config['install'],'Terminal','install')}<p class="note">{esc(config['prerequisites'])}</p><p class="note">{esc(config['model_note'])}</p><div class="compact-links">{link(repo+'/blob/main/'+config['guide'],'Setup and usage guide')}{link(repo+'#readme','Full documentation')}</div></div></section>
     <section class="section"><div class="section-heading"><div><p class="eyebrow">Part of the same family</p><h2>Keep making.</h2></div><p>Each tool stands on its own. Explore the others when your work takes you there.</p></div>{related(config['related'],args)}</section>'''
 
@@ -171,9 +186,9 @@ def catalog(config, args, root):
         tags = ''.join('<span class="tag">'+esc(p)+'</span>' for p in tool_platforms)
         entries.append(f'<article class="catalog-card" data-tool="{esc(slug)}" data-platforms="{esc(" ".join(tool_platforms))}" data-search="{search}"><h2>{esc(display_name)}</h2><p>{esc(excerpt)}</p><div class="tool-meta">{tags}</div>{detail}<div class="card-links">{launch}{link(repo,"Repository")}{manifest_link}</div></article>')
     options = ''.join(f'<option value="{esc(p)}">{esc(p)}</option>' for p in sorted(platforms))
-    return f'''<section class="hero catalog-hero"><p class="eyebrow">Amplifier Smart Tools / Catalog</p><h1>Find a tool.<br>Make something happen.</h1><p class="lede">Domain expertise you can put to work. Explore the tools, inspect their requirements, and bring the right one to your agent.</p><div class="actions">{link('#discovery','Get the discovery skill','button primary')}{link(repo_url('catalog')+'#contributing','Add a tool','text-link')}</div></section>
+    return f'''<section class="hero catalog-hero"><p class="eyebrow">Amplifier Smart Tools / Catalog</p><h1>Find a tool.<br>Make something happen.</h1><p class="lede">Domain expertise you can put to work. Explore the tools, inspect their requirements, and bring the right one to your agent.</p><div class="actions">{link('#discovery','Get the skill','button primary')}{link(repo_url('catalog')+'#contributing','Add a tool','text-link')}</div></section>
     <section aria-label="Browse smart tools"><div class="filters"><div class="search-field"><label for="tool-search">Search tools and use cases</label><input id="tool-search" type="search" placeholder="Try video, research, or presentations" autocomplete="off"></div><div><label for="platform">Declared platform</label><select id="platform"><option value="">All platforms</option>{options}</select></div></div><p class="catalog-count" id="result-count" role="status">{len(entries)} tools</p><noscript><p>Search requires JavaScript. All tools are listed below.</p></noscript><div class="catalog-grid">{''.join(entries)}</div><div id="empty-results" class="empty" hidden><h3>No matching tools.</h3><p>Try a broader term or another platform.</p><button id="clear-filters" class="button">Clear filters</button></div><p class="catalog-note">Descriptions and declared platforms come from the tools' own manifest snapshots. A listing does not establish installation or usability in your environment. Expand an entry to inspect its source revision and refresh time.</p></section>
-    <section class="section two-col" id="discovery"><div><p class="eyebrow">Let your agent help</p><h2>One skill.<br>The whole catalog.</h2><p style="margin-top:24px">Ask your coding agent to find a Smart Tool for your task. It can inspect the manifest, check the local environment, and follow the selected tool's own guidance.</p></div><div class="callout"><h3>Install the discovery skill.</h3>{code_box(config['install'],'Terminal','install')}<p class="note">Keep only the agents you use. This installs discovery guidance, not the tools or their credentials.</p>{link(repo_url('catalog')+'#install-the-skill','All installation options','text-link')}</div></section>'''
+    <section class="section two-col" id="discovery"><div><p class="eyebrow">Let your agent help</p><h2>One skill.<br>The whole catalog.</h2><p style="margin-top:24px">Ask your agent to find a Smart Tool for your task. It can inspect the manifest, check the local environment, and follow the selected tool's own guidance.</p></div><div class="callout"><h3>Install the skill.</h3>{code_box(SKILL_INSTALL,'Terminal','install')}<p class="note">This installs guidance for your agent, not the tools or their credentials.</p>{link(repo_url('overview')+SKILL_PATH,'Read the skill','text-link')}</div></section>'''
 
 
 def build_reader(root, out, args, config):
@@ -274,10 +289,12 @@ def main():
     for asset_dir in (THEME/'assets', root/'site/assets'):
         if asset_dir.is_dir():
             shutil.copytree(asset_dir, out/'assets', dirs_exist_ok=True)
-    if config.get('image'):
-        source = (root/config['image']).resolve()
+    media_paths = [config[k] for k in ('image', 'video') if config.get(k)]
+    media_paths += [demo[k] for demo in config.get('capability_demos', []) for k in ('image', 'video')]
+    for media_path in media_paths:
+        source = (root/media_path).resolve()
         if not source.is_relative_to(root):
-            raise ValueError('Image must belong to the repository')
+            raise ValueError('Media must belong to the repository')
         shutil.copy2(source,out/'assets'/source.name)
     kind = config['kind']
     body = overview(config,args) if kind == 'overview' else catalog(config,args,root) if kind == 'catalog' else tool_page(config,args)
