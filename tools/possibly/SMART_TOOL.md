@@ -9,6 +9,8 @@ use_cases:
   - Hand a self-contained interactive prototype and decision record to a development agent
 platforms:
   - macos
+  - linux
+  - windows
 requires:
   - name: model-provider
     purpose: Generation runs through embedded Amplifier Agent and requires explicitly authorized provider credentials. Deterministic state and help operations work without them.
@@ -54,6 +56,9 @@ helps with ChatGPT device OAuth or GitHub CLI/Copilot setup. These need no store
 The dashboard gear opens process-only provider settings, connection tests and login help.
 No settings file is saved; provider-owned OAuth caches are allowed.
 See [provider setup and examples](docs/providers.md).
+
+Worker status reads do not signal processes. Cancellation stops owned worker trees,
+and recovery waits for the owning process to exit before admitting another attempt.
 
 ## Caller round trip
 

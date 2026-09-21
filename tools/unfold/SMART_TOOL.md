@@ -11,6 +11,8 @@ use_cases:
   - Review, rename and export saved outputs without a model
 platforms:
   - macos
+  - linux
+  - windows
 requires:
   - name: Node.js, HyperFrames 0.8.33 and GSAP 3.14.2
     purpose: Render existing compositions; not needed for help or retained-state reads.
@@ -20,26 +22,75 @@ requires:
     purpose: Decode video observations and inspect encoded media.
     install: https://ffmpeg.org/download.html
     optional: true
+  - name: Linux system libraries (unzip and Chromium dependencies)
+    purpose: On Ubuntu 24.04, HyperFrames requires a zip archiver and headless Chromium shared libraries for rendering.
+    install: src/unfold/SMART_TOOL.md#linux-renderer-prerequisites
+    optional: true
 ---
 # Unfold
 
 The Python library is the product. The CLI and optional loopback dashboard adapt
-the same operations. Compositions are 1280×720 at 30 fps, lasting 5–60 seconds.
+the same operations. Compositions are 1280×720 at 30 fps, lasting one frame (1/30 second) through 60 seconds.
 The authoring profile supports text, cards, paths, polygons, circles, arcs, image
-assets, stroke drawing and camera motion. An embedded Amplifier Agent creates and
+assets, stroke drawing, equal-point-count path morphing and camera motion. An embedded Amplifier Agent creates and
 refines compositions; deterministic operations manage assets, packs and delivery.
+
+Requested durations are rounded to the nearest whole 30-fps frame, with exact
+half-frame ties rounded up, and stored as frame count / 30. A 2-second bumper is
+60 frames; 2.5 seconds is 75; 2.52 seconds becomes 76 frames (2.533333… seconds).
+Values below 1/30 second or above 60 seconds are rejected before rounding. The
+general-purpose default remains 20 seconds. New briefs, scenes, review bounds,
+video/overlay artifacts and handoffs share this canonical duration. Encoded
+`frame_count` verifies that span; container duration displays can round to their
+clock precision. Existing retained source keeps its authored timing on re-render.
+Sampling chooses the frame containing each requested time; returned `time` is the
+frame timestamp and `requested_time` preserves the request. Times must precede
+the end; the final frame starts at duration minus 1/30 second.
+
+Custom typography uses imported static TrueType (`.ttf`) and OpenType (`.otf`)
+faces up to 32 MiB each. Family, numeric weight and style are read from the file.
+Collections, web fonts, variable fonts and SVG fonts are rejected; supply a static
+TTF/OTF face instead. Text/card elements select `font_asset_id`, optional
+`font_weight` (1–1000), `font_style` (normal/italic/oblique), `letter_spacing`
+(pixels, default 0) and `line_height` (multiplier, default 1.22). A selected file
+must provide the exact weight/style and every non-whitespace character. No synthetic
+bold/italic or silent font substitution is used. Omitting weight/style uses that
+file's face; compositions without custom typography retain the system sans-serif.
+
+Import each required face with `import-asset --role font`, then include its asset ID
+in an identity's `asset_ids`. Assign roles inside pack guidance, for example
+`{"typography":{"display":{"font_asset_id":"FONT_ASSET_ID"},"heading":{"font_asset_id":"BOLD_ITALIC_ASSET_ID","font_weight":700,"font_style":"italic"}}}`.
+Roles guide the authoring agent; they are not automatic styles applied to every text
+node. Font bytes stay local; the permitted agent receives metadata and sampled frames.
+Rendered scenes retain and hash their used font dependencies and validate them with
+the renderer's browser. Capture waits for font loading. Text stays editable and can
+use the existing element animations. Retained scenes re-render without original
+font paths; selected identity versions still require their pinned assets for new
+model-backed work.
+
+Identity ZIP imports remap role asset IDs to the new library. Identity exports and
+delivery handoffs include only fonts declared redistributable and retain attribution;
+unknown/restricted faces are listed as omissions. An identity with omitted faces has
+unresolved prerequisites and cannot be used until repaired in a new version. Handoffs
+contain rendered media and eligible font dependencies, not a full editable project.
+Newly authored scenes retain the then-current rights declarations; handoffs also honor
+any stricter current asset declaration. Declarations are supplied
+by the caller, not a license verification service.
 
 Studio review includes full-width Single, synchronized Compare, retained drafts,
 bounded direct refinement, cancellation and observable outcomes. Identity ZIPs carry
 guidance and eligible assets. Delivery supports silent transparent ProRes 4444 MOV
 and H.264 MP4 with optional reference footage and imported audio.
 
-This is not the entire draft vision. Arbitrary HTML/CSS, custom-font rendering,
-external source-edit adoption, editable project ZIP round trips, transcription,
-audio generation and renderer migration are not supported. Fonts can be stored,
-previewed and shared, but a required custom font remains a prerequisite to resolve;
-no promise of font substitution is made. Reusable motion/recipe files are stored
-as inert assets, never executed on import.
+Closed polygon paths can animate individual corner angles on a circular track,
+with attached corner markers. This supports irregular shapes resolving into
+regular polygons without corners leaving the track.
+
+This is not the entire draft vision. Arbitrary HTML/CSS, external source-edit adoption,
+editable project ZIP round trips, transcription, audio generation and renderer
+migration are not supported. Custom typography requires supplied static font faces;
+web/variable fonts and automatic font substitution are not supported. Reusable
+motion/recipe files are stored as inert assets, never executed on import.
 
 ## Installation
 
@@ -70,6 +121,15 @@ manifest. HyperFrames may prepare its Chromium binary on the first render. Creat
 calls do not run npm or initiate authentication. Amplifier Agent v0.17.0 and provider
 module revisions are pinned; first Agent preparation can fetch its runtime modules.
 Production guidance is packaged. No private skills directory is required.
+
+### Linux renderer prerequisites
+
+On Ubuntu 24.04, install the unzip utility and Chromium shared libraries before
+rendering. Package names differ on other Linux distributions:
+
+```sh
+sudo apt-get install unzip libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libatspi2.0-0t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64
+```
 
 ## Library and authority
 
@@ -131,6 +191,30 @@ results and recovery guidance; `-h` is its short flag reference.
 
 Global CLI options `--library PATH` and `--backend PATH` precede the subcommand.
 
+`max_response_tokens` is a per-response ceiling. OpenAI calls use non-streaming
+requests with no automatic truncation continuation or raised-token recovery.
+`PROVIDER_INCOMPLETE` ends the operation without committing a revision. Simplify
+its brief or explicitly authorize a new operation; retrying the same request ID
+returns the retained failure. `RESOURCE_LIMIT` can also mean an internal provider
+request was blocked before transmission.
+
+`model_call` events count entries through Unfold's model gate. OpenAI additionally
+records `provider_attempt` events before each request, including its token ceiling;
+at most one attempt is permitted per gate call. Revision usage includes
+`provider_attempts` for OpenAI; it is null for other providers, whose internal
+attempts are not measured by this counter. These are attempt counts, not billed
+token usage. Events remain available when an operation fails.
+
+Scene validation errors are repairable within the remaining grant. The first
+three rejected author/patch payloads per operation are retained in local
+`operations/OPERATION/rejected-CALL.json` diagnostics, each capped at 64 KiB, with
+original byte count/hash and a truncation flag. Files are created with owner-only
+permissions on POSIX; Windows uses the library directory's ACL. They may contain
+supplied creative material. Public events contain a diagnostic reference and
+field-level errors, not the rejected payload. Diagnostics are not exported or
+sent back to providers automatically and remain until that operation's local
+workspace is removed. Validation does not guarantee creative quality.
+
 - `create(brief, grant, request_id=None)` / `create --brief brief.json --grant grant.json`:
   model-backed. Returns a retained operation; completion identifies the revision.
 - `revise(revision_id, feedback, grant, request_id=None)` /
@@ -170,6 +254,8 @@ are readable from another process. Supply a 32-character lowercase hexadecimal
 return the prior state, including running/failed states, without spending again.
 Different input with the same ID fails. After caller/process loss a record may remain
 running; this means uncertain interruption, not permission to retry automatically.
+Worker status checks do not send signals. Cleanup stops the owned worker tree;
+recovery checks the exact worker command and request path before stopping it.
 Direct synchronous calls need a live supervisor for cancellation. Dashboard jobs
 reconcile completed or interrupted supervisors on `review_state`; they never restart
 spending automatically. A new creative attempt requires a new request identity.

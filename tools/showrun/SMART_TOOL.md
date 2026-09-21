@@ -12,6 +12,8 @@ use_cases:
   - Inspect a prior take without repeating model calls or target interactions
 platforms:
   - linux
+  - macos
+  - windows
 requires:
   - name: Chromium
     purpose: Playwright headless viewport capture; deterministic metadata works without it.
@@ -39,8 +41,9 @@ DOM observations, not caller-authored automation scripts. It does not generate
 target content, click arbitrary buttons, reset data, make arbitrary edits or publish.
 An explicit exact-comment grant adds scoped Stories UI fill and submission; it
 does not widen navigation-only requests or authorize Stories model use.
-Capture itself remains web-only, silent, single-surface and does not accept login,
-uploads or clipboard access. The provider-free `review` capability browses retained
+Capture is silent and single-surface, using either Chromium or the first native
+macOS or experimental Windows window backend. Login, uploads and clipboard access are unsupported.
+Windows web capture is best effort; managed Stories on Windows is not supported. The provider-free `review` capability browses retained
 demos, plays their original MP4 bytes, and manages exact review metadata; it never
 opens the target application or calls a model.
 
@@ -180,7 +183,7 @@ input/selection values must be explicitly supplied in `allowed_values`. Duplicat
 labels with distinct local context can be resolved. Changed controls reobserve;
 unrelated page clocks do not invalidate a decision. No arbitrary scripts, URLs,
 file transfers, clipboard, popups, WebSockets or cross-origin resources are granted.
-Native computer use is a later backend, not implemented by this web path.
+Native macOS uses a separate window backend; see Native macOS window below.
 
 Legacy navigation and exact comment requests keep their original restricted
 behavior in the compatibility implementation; they do not gain generic authority.
@@ -239,7 +242,8 @@ The fixture remains caller-owned: this prevents accidental use of arbitrary
 stores, not tampering by the machine owner or concurrent owner edits.
 Failed preparation may leave a partial import; it is preserved, never overwritten.
 
-Shutdown acknowledgment is followed by Linux process-exit verification.
+Shutdown acknowledgment is followed by platform process-exit verification. Managed
+Stories is unsupported on Windows and depends on the installed Stories platform support.
 `owned-dashboard.json` retains the acquired service and process identity (PID,
 boot ID and start ticks), plus revision/content identity, never the access token.
 The public shutdown call is refused if exact identity cannot be verified.
@@ -301,6 +305,116 @@ inspect it and prepare a fresh fixture rather than silently duplicating the comm
 Draft clearing is a bounded UI side effect, not evidence of submission. Transport
 `dispatched` entries do not assert server completion; the independent readback does.
 
+## Native macOS window
+
+The first native backend supports macOS 14+ and one already-open, uniquely named
+window in a named application bundle. Showrun owns the observe/decide/act loop;
+the packaged bridge supplies window screenshots, accessibility observations and
+control-bound click/fill operations. Clicks activate and raise the target window,
+resolve the selected accessibility control’s current center, and verify that it
+is the control under that point before sending a mouse click. This temporarily takes foreground control.
+There is no fallback replay after a click. The model receives the screenshot and current
+control references. It does not receive arbitrary keyboard, coordinates, shell,
+clipboard, app-launch or file access. Inaccessible controls fail explicitly.
+Native fill focuses the target application and field, then verifies readable entered
+values. See the development-build control support below for rich editors without value readback. If an accessibility value write leaves an empty editor unchanged, the
+bridge can type the exact granted single-line text using process-targeted Unicode
+events. It checks foreground app and field focus and never sends Return or uses
+the clipboard. Nonempty fields, control characters, focus changes and unverified
+text stop this fallback with an uncertain action rather than automatically retrying.
+
+Run `showrun prepare-desktop` (library: `Showrun.prepare_desktop()`) to download
+the version-pinned Apple Silicon companion from the repository's GitHub Releases.
+The installer verifies a SHA-256 pinned in the package and the app's ad-hoc
+signature before replacing the installed app. It does not require Xcode or a
+compiler. Developer builds use `showrun prepare-desktop --build` (library:
+`Showrun.prepare_desktop(build=True)`) with Apple Command Line Tools.
+The early-access binary is ad-hoc signed, **not Developer ID signed or notarized**.
+If macOS blocks the first launch, attempt `showrun desktop-status`, then use
+System Settings → Privacy & Security → Open Anyway for this app if you trust it.
+Do not disable Gatekeeper globally. Run `showrun desktop-status` again after
+granting both permissions; it reports `screen_recording`, `accessibility` and
+`ready` without inspecting a target app. A completed check with `ready: false`
+means setup is incomplete even though the CLI check itself exited successfully. This is explicit setup,
+not part of recording, and does not inspect applications or request permissions.
+In macOS System Settings → Privacy & Security, grant Screen Recording and
+Accessibility to `~/Applications/Showrun Desktop.app` (the returned `app` path).
+Showrun launches the companion through macOS LaunchServices, rather than as a
+child executable of the calling terminal or agent. The companion connects to a
+private per-run Unix socket authenticated with a one-time nonce. Closing that
+connection exits the companion; it does not close the target application.
+Screen Recording permission checks are attributed to `org.showrun.desktop` on the
+verified host. Grant permissions to Showrun Desktop, not to each caller. Ad-hoc
+updates may require removing and re-adding the app in both permission panels.
+The app has a stable bundle identifier and executable path. Preparation reuses an
+unchanged build. Local builds are ad-hoc signed, not Developer ID signed or
+notarized, so updates may still require a new permission grant. Missing permissions fail before UI
+actions. FFmpeg/ffprobe and the configured model runtime are still required;
+Chromium is not required for native capture. Select a model supporting image input.
+
+Prepare a non-sensitive window and its contents first. The target's bundle ID and
+exact window title must each identify the same unique window. Title changes,
+minimization or a lost window stop the take. Match capture dimensions to the
+window's actual pixel dimensions, including Retina scaling. Alternatively set
+`target.resize_to_capture: true` to explicitly allow Showrun to resize the named
+window before recording to match `capture.width` and `capture.height` (which also
+specify the aspect ratio). It converts pixels to macOS points and verifies a real
+screenshot before capture or model actions. App minimum sizes and display limits
+may prevent an exact match: `capture_geometry` reports requested and measured
+sizes, while `desktop_resize_unavailable` means the app refused window sizing.
+No stretching or cropping is performed. The window is left at its resulting size,
+including when preparation fails. Omit the option to preserve existing behavior. For example:
+
+```json
+{
+  "request_id": "native-take-01",
+  "target": {
+    "kind": "macos",
+    "bundle_id": "com.example.DemoApp",
+    "window_title": "Prepared Demo"
+  },
+  "starting_state": "Ready",
+  "capture": {"width": 1280, "height": 720},
+  "steps": [
+    {"id": "save", "instruction": "Press Save and show the saved result",
+     "visible_text": "Saved", "hold_seconds": 3}
+  ],
+  "authority": {
+    "navigation_only": false,
+    "disclose_dom": false,
+    "disclose_accessibility": true,
+    "disclose_screenshots": true,
+    "max_seconds": 60,
+    "max_model_calls": 8,
+    "max_actions": 12,
+    "ui": {
+      "actions": ["click", "fill"],
+      "allowed_values": ["Example task"],
+      "target_effects": "all_in_session"
+    }
+  }
+}
+```
+
+The caller owns the application and session effects; Showrun closes only its
+helper. This backend is not a desktop sandbox and does not promise background
+focus isolation. Use an app/session prepared for the demo. App effects, dialogs
+and sensitive UI may exceed what window capture can prove. Secure accessibility
+fields stop capture and restrict retained footage, but this is not a universal
+sensitive-content detector or automatic redaction. Avoid login and real secrets.
+
+Capture samples the actual window at up to 5 Hz, preserving waits, then encodes
+the samples into the usual silent MP4. It omits the cursor and can miss transient
+states; the receipt declares these limitations and approximate timing. It is not
+a claim of full-motion 25 fps capture. Outcome checks use accessibility text,
+accessible control visibility, or field values, not the model's success assertion
+or proof of backend persistence. `checked` field assertions are unsupported.
+
+Timing drift is advisory: decodable footage remains available, with media timing
+metadata and any `timing_warnings` in the receipt. Structurally inconsistent step
+evidence, failed actions, invalid media, wrong geometry and restricted footage
+still prevent complete success. Downstream editing owns retiming and polish.
+
 ## Lifecycle, budgets and retries
 
 `record` runs synchronously in the caller process, not a background job service.
@@ -311,9 +425,10 @@ The helper attempts service cleanup on pipe EOF; no crash-restart guarantee.
 Inspect `owned-dashboard.json` and the isolated target store if cleanup is uncertain.
 Never kill a process by its port or assume a shutdown acknowledgment proves exit.
 Retained running owners with a reused PID, different boot, missing legacy identity
-or unreadable process identity are reported `uncertain`, not live. Where pidfd
-signaling is unavailable, failed helper cleanup remains uncertain rather than
-falling back to a blind PID signal.
+or unreadable process identity are reported `uncertain`, not live. Linux force-stop uses pidfd; Windows uses one verified process handle. macOS
+refuses force-stop of retained PIDs rather than using a race-prone kill fallback.
+Windows flushes receipt files and replaces them atomically but does not claim
+POSIX directory-fsync durability.
 
 A SQLite transaction durably reserves the caller's request ID before model or
 target effects. Scope: that store, retained indefinitely until the caller explicitly
@@ -470,5 +585,113 @@ stderr. Terminal failure/partial/cancelled/uncertain/restricted outcomes exit
 nonzero. `status` is passive, `inspect` checks delivered hashes/decoding, neither
 boots a provider. Errors identify a stable code, safe message and remedy.
 There are no interactive prompts. `-h` is terse; `--help` is this library skill;
-every capability also has `--help`. For composition, use the library rather than
+every capability also has focused `--help` covering only its purpose, arguments,
+prerequisites, example, results and recovery. Use top-level `--help` for the full
+manual; command help links to packaged resources instead of repeating that manual. For composition, use the library rather than
 parsing CLI output.
+
+### Waiting for target work
+
+Set a step's `wait_for_result: true` to keep recording and polling its assertions
+without model calls or UI actions. Use a preceding submission step to establish
+that work started; an already-true completion assertion can otherwise skip the wait.
+`authority.max_seconds` allows up to 1800 seconds, including all steps and holds.
+Storage limits still apply. A named-window recording does not follow other apps.
+
+## Experimental native Windows backend
+
+Windows has an early-access UI Automation / PrintWindow backend tested on Windows 11 x64.
+Install with Python 3.12+, Git/uv, and FFmpeg/ffprobe:
+
+```sh
+showrun prepare-desktop
+showrun desktop-status
+```
+
+The package pins the Windows x64 `desktop-v0.2.0` ZIP and SHA-256. Installation
+places the unsigned, self-contained executable in `%LOCALAPPDATA%/Showrun/Desktop`.
+No .NET runtime or compiler is needed. Early-access Windows security prompts or
+organization policies may block unsigned executables; this tool does not change
+those policies. `--build` is the developer path and requires the .NET 8 SDK/runtime.
+Mac installations continue to use the existing macOS release and permission setup. If Git
+reports long dependency paths during installation, enable `core.longpaths` for
+that setup process. The companion is launched as a temporary, limited-privilege
+interactive Scheduled Task under the caller's Windows account. SSH can run the
+caller in session 0 while the companion connects from the user's logged-in
+desktop. A random token authenticates its loopback-only connection. Closing the
+connection stops the companion and removes its task, never the target app.
+
+Use `target: {"kind":"windows","pid":1234,"window_title":"Exact title",
+"resize_to_capture":true}`. PID and exact title must identify one visible window
+in the companion's session. The bridge then retains the window handle and process
+creation time; normal title changes during editing do not switch the target.
+UIA field observations normalize CR/CRLF line endings to LF, so use LF in multiline
+field assertions. Text-entry style belongs to the demo step: `"text_entry":"immediate"` (the default)
+or `"text_entry":"paced"`. `"text_entry":"fast_imperfect"` selects shorter delays
+and two deliberate extra-letter mistakes followed by deletion and correction.
+This opt-in style permits transient misspellings; the final text remains exact.
+Use it only in a prepared demo field where partial input has acceptable effects.
+Paced entry currently requires Windows; other targets
+reject it during validation. Showrun adds a 400 ms initial hesitation, short varied
+character delays, and punctuation pauses. It captures each displayed character
+before requesting the next, in addition to normal background sampling.
+The adapter only retains the authorized text and original control, advances one
+Unicode text element per request, and checks the previous value for interference.
+Paced fill remains one action; cancellation can leave partial text and never retries
+it automatically. Long text takes longer and remains subject to the take deadline.
+This uses progressive UIA values, not physical keystrokes. macOS is unchanged.
+
+Use the same screenshot/accessibility grants and click/fill actions as macOS.
+UIA invoke, selection, expand/collapse, toggle and writable-value controls are
+supported. Tabs, menu items and expandable controls use actual mouse clicks at
+UIA-provided clickable points, after foreground, focus and hit-target checks.
+The model still supplies only an observed control reference, never coordinates. Observed grid
+cells additionally use UIA selection/focus followed by exact Unicode input and a
+fixed Enter commit, rather than ValuePattern writes. This path requires foreground
+focus, no held modifiers, and immediate nonempty single-line input. It exposes no
+model-selected keys or clipboard operations; paced grid input is not yet supported.
+No arbitrary coordinate/keyboard fallback, elevated app access, secure desktop, minimized
+windows, or separate dialog/browser-window capture is promised. Keep the desktop
+unlocked and avoid disconnecting or minimizing RDP during a take.
+
+PrintWindow asks the target to render its window; some apps return incomplete or
+blank content despite API success. Always inspect actual footage. This initial
+backend is not general Windows Graphics Capture support. Recorded native fixture
+trials and live model/application trials are separate evidence.
+
+Windows grid-entry evidence: Excel ValuePattern writes can echo requested text
+without changing workbook cells. Grid cells therefore use focused keyboard entry;
+ValuePattern is read for outcome assertions, not used for the write. Formula
+assertions should check the displayed calculated value. A repeated fill of the
+same observed control with unchanged or already-matching text stops with
+`desktop_no_progress` instead of repeatedly spending the model/action budget.
+Native accessibility assertions still do not independently prove workbook
+persistence; inspect footage and independently verify important demo results.
+
+Excel menu trial: mouse clicks successfully switched ribbon tabs, opened Freeze
+Panes and selected Freeze Top Row; independent Excel state confirmed a one-row
+freeze. PrintWindow omitted the open drop-down from the recording despite the
+menu being available for interaction. Cursor capture is also absent. Do not claim
+that native menu interaction success proves a complete or readable menu recording.
+
+### macOS editable controls (desktop-v0.3.0)
+
+The Mac adapter recognizes writable text fields, text areas and editable combo
+boxes. Clicking an observed combo box with an Accessibility Confirm action
+confirms its current value. A focusable text area without AXValue writes uses exact Unicode
+keyboard entry only after focus exposes verifiably empty text, with foreground, element-focus and modifier checks. Only
+immediate, nonempty, single-line input is supported. No clipboard, selection shortcut or Return is
+used. When native value readback is unavailable, the bridge reports input sent;
+caller-supplied visible assertions must verify the result. Use a separate observed
+application button to commit an edit. These mechanics
+ship in the pinned desktop-v0.3.0 companion. Excel new-cell entry was verified
+with recorded UI operations and independent XLSX values/formula inspection.
+Editing populated cells and paced Mac typing remain unsupported. Separate Name
+Box fill and Confirm steps avoid repeated fills; commit through the observed
+Enter button. Saving during a take may change the bound window title and stop it.
+
+After upgrading an ad-hoc-signed Mac companion, run desktop-status. Settings may
+show enabled switches whose grants still reference an older binary signature.
+If permission checks fail, remove and re-add Showrun Desktop in both Accessibility
+and Screen & System Audio Recording, enable it, and recheck desktop-status.
+Native execution takes foreground control; pause typing during the take.
