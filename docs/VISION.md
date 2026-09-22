@@ -9,8 +9,8 @@ suitable Smart Tool without receiving a separate lesson for each tool.
 A Smart Tool is a library and command-line program that describes itself and
 can provide both ordinary operations and operations backed by its own AI.
 
-One shared discovery skill, a reusable set of agent instructions, connects a
-small catalog to the tools' own descriptions. The person uses the same approach
+One shared skill, `amplifier-smart-tools` from the specification repository,
+connects a small catalog to the tools' own descriptions. The person uses the same approach
 in local Codex, Claude Code, GitHub Copilot CLI, and Amplifier sessions.
 Host permissions and execution environments remain visible differences.
 
@@ -35,7 +35,7 @@ The catalog points to upstream metadata and may retain only exact generated
 manifest snapshots with source provenance. Missing guidance belongs in the tool
 before it becomes another wrapper or independently maintained description.
 
-### 2. **One discovery skill serves the catalog.**
+### 2. **One skill serves the catalog.**
 
 Host-specific installation does not multiply into per-tool instructions.
 The shared flow learns operation details from each selected tool.
@@ -67,7 +67,7 @@ person's environment. The host's authorization rules remain in force.
 
 - A person sees a fresh coding-agent session select and inspect a tool using
   only the shared skill and the tool's own description.
-- A maintainer adds a source pointer without rewriting the discovery skill.
+- A maintainer adds a source pointer without rewriting the skill.
 - A reviewer can identify the source revision used for a recommendation.
 - A person gets a specific blocker when prerequisites are absent and does not
   discover that unrelated sessions or environments were modified.

@@ -1,7 +1,7 @@
 # Catalog Source Contract - v1 (DRAFT)
 
 **Who builds against this** Catalog contributors and consumers that read source
-pointers, including the shared discovery skill.
+pointers, including the shared `amplifier-smart-tools` skill.
 
 ## What it looks like
 
