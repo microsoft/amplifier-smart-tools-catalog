@@ -48,6 +48,26 @@ platforms:
   - macos
   - windows
 requires:
+  - name: numpy
+    purpose: >-
+      Array math backing every DSP stage.
+    optional: false
+    install: https://pypi.org/project/numpy/
+  - name: scipy
+    purpose: >-
+      Filter design and signal processing primitives.
+    optional: false
+    install: https://pypi.org/project/scipy/
+  - name: soundfile
+    purpose: >-
+      Reads and writes WAV/FLAC/AIFF via libsndfile.
+    optional: false
+    install: https://pypi.org/project/soundfile/
+  - name: pyloudnorm
+    purpose: >-
+      ITU-R BS.1770 loudness measurement.
+    optional: false
+    install: https://pypi.org/project/pyloudnorm/
   - name: ai-provider
     purpose: >-
       Backs the verbs that choose a chain rather than apply one -- `advise` and `master --auto`
@@ -145,9 +165,9 @@ aud detect silence in.wav | aud cut | aud render in.wav out.wav
 `render` applies stages in canonical order regardless of the order you appended them, and says
 so in its report:
 
-`editing (cut, strip-silence) -> repair (de-ess, de-verb) -> tone (EQ, EQ-match) ->
-dynamics (multiband compression) -> character (saturation, ambience) -> loudness -> limiting ->
-output format (downmix, resample)`
+`editing (cut, strip-silence) -> retime (stretch, pitch) -> repair (gate, expand, dereverb, deess) ->
+tone (EQ, EQ-match) -> dynamics (multiband compression) -> character (saturation, ambience) ->
+loudness -> limiting -> output format (downmix, resample)`
 
 **Editing is first, and that is not a preference.** Cutting changes the timeline everything
 downstream measures. Integrated loudness is an average over duration: target −14 LUFS across
@@ -194,6 +214,7 @@ moved, by which rule, and whether a requested snap failed.
 | `plan` | deterministic | start an empty chain, or load one from a file |
 | `cut` | deterministic | editing stage: remove a listed set of regions. Every boundary is padded, snapped to a safe cut point and crossfaded |
 | `strip-silence` | deterministic | editing stage: remove or shorten the silences, by a rule rather than a list. Same padding, snapping and crossfading |
+| `gate` `expand` | deterministic | repair stage: remove or reduce quiet material, ahead of dereverb/deess and compress |
 | `deess` `dereverb` | deterministic | repair stage |
 | `eq` `eq-match` `curve` | deterministic | tone stage, including extracting a curve from one file and applying it to another |
 | `compress` | deterministic | multiband compression and dynamic range control |
