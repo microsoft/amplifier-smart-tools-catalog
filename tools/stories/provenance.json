@@ -1,8 +1,8 @@
 {
-  "last_success": "2026-09-25T03:31:40Z",
+  "last_success": "2026-09-26T03:31:21Z",
   "original_manifest_path": "src/amplifier_smart_tool_stories/SMART_TOOL.md",
   "source": {
-    "commit": "2a0e5e9708b63488ac9e53a39ef4e0e670e31be7",
+    "commit": "709f6727b769ed6a5aebbf41d52700ae3537b330",
     "path": ".",
     "ref": "main",
     "repository": "https://github.com/robotdad/amplifier-smart-tool-stories.git"

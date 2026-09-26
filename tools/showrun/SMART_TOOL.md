@@ -227,6 +227,53 @@ Native macOS uses a separate window backend; see Native macOS window below.
 Legacy navigation and exact comment requests keep their original restricted
 behavior in the compatibility implementation; they do not gain generic authority.
 
+## Saved web sign-in
+
+Some web apps require signing in. **Never ask for, pass or type credentials through a
+conversation, request or model.** Instead, the person signs in once, themselves, in a
+visible browser window that Showrun opens, and takes reuse that saved session:
+
+```sh
+showrun auth prepare unified --url http://127.0.0.1:8941/
+# Sign in in the window that opens. Close it once the signed-in app is showing,
+# or pass --ready-text "<text shown only when signed in>" to finish automatically.
+showrun auth list
+showrun auth delete unified
+```
+
+Any sign-in page works in that window, including a local-account form (Amplifier
+Unified's macOS account login) or pages with MFA. Showrun never reads form input values.
+It keeps only the target host's cookies and the exact origin's local storage. It then
+verifies them in a separate headless browser with a non-redirecting request to the entry URL,
+and saves nothing unless the site accepts them (`auth_not_signed_in`). Profiles live under
+`$XDG_STATE_HOME/showrun-auth/<name>/` (global `--auth-root` or `Showrun(auth_root=...)`
+to override), private to the account (0700 folders, 0600 files) and separate from the take
+root, so review, ZIP and MCP surfaces never see them. **A saved session works like a password
+for that site until it expires** (7 days for Unified's default). Delete it when finished.
+
+Use it from a `url` target by name:
+
+```json
+"target": {"kind": "url", "url": "http://127.0.0.1:8941/",
+           "origins": ["http://127.0.0.1:8941"], "auth": "unified"}
+```
+
+Before launching anything, the take checks that the profile exists, is private and
+matches the target's exact origin, and that its cookies haven't expired (`auth_missing`,
+`auth_insecure`, `auth_scope`, `auth_expired`). Before capture starts, it repeats the
+non-redirecting entry request. A rejected session fails with `auth_expired` and nothing is
+filmed. Remedy: `showrun auth prepare <name> --url <entry URL> --replace`, then retake with
+a new request ID. Session values join leak detection: if one appears on screen or in an
+observation, the footage is restricted. A password field appearing mid-take also restricts
+footage. The receipt's `auth` block records only the profile name, origin, creation and
+expiry times, counts and the entry check status.
+
+A signed-in session carries the person's access in that app: combine it with a deliberately
+narrow `authority.ui` grant and allowed values (for Unified, a signed-in UI can start agent
+work as that user). Identity-provider redirects (Entra/SSO silent renewal on another origin)
+are not yet supported, because web targets stay on one origin. Native macOS targets use
+whatever the app window is already signed in to.
+
 ## Initial managed fixture integration
 
 First prepare a fixture from supplied exported presentation content, not a live
@@ -375,7 +422,8 @@ Do not disable Gatekeeper globally. Run `showrun desktop-status` again after
 granting both permissions; it reports `screen_recording`, `accessibility` and
 `ready` without inspecting a target app. A completed check with `ready: false`
 means setup is incomplete even though the CLI check itself exited successfully. This is explicit setup,
-not part of recording, and does not inspect applications or request permissions.
+not part of recording, and does not inspect applications or request permissions
+(except the explicit `--request-microphone` prompt described under Native audio).
 In macOS System Settings → Privacy & Security, grant Screen Recording and
 Accessibility to `~/Applications/Showrun Desktop.app` (the returned `app` path).
 Showrun launches the companion through macOS LaunchServices, rather than as a
@@ -443,7 +491,8 @@ fields stop capture and restrict retained footage, but this is not a universal
 sensitive-content detector or automatic redaction. Avoid login and real secrets.
 
 Capture samples the actual window at up to 5 Hz, preserving waits, then encodes
-the samples into the usual silent MP4. It omits the cursor and can miss transient
+the samples into the usual MP4, which is silent unless `capture.audio` is requested
+(see Native audio below). It omits the cursor and can miss transient
 states; the receipt declares these limitations and approximate timing. It is not
 a claim of full-motion 25 fps capture. Outcome checks use accessibility text,
 accessible control visibility, or field values, not the model's success assertion
@@ -453,6 +502,68 @@ Timing drift is advisory: decodable footage remains available, with media timing
 metadata and any `timing_warnings` in the receipt. Structurally inconsistent step
 evidence, failed actions, invalid media, wrong geometry and restricted footage
 still prevent complete success. Downstream editing owns retiming and polish.
+
+### Native audio (desktop-v0.6.0, macOS)
+
+Audio is **off by default**. Add `capture.audio` to a `macos` target request to
+record sound with the sampled window footage. No virtual audio device is needed:
+the companion uses ScreenCaptureKit audio capture and always excludes Showrun's
+own process audio.
+
+```json
+"capture": {"width": 1280, "height": 720,
+            "audio": {"output": "application"}}
+```
+
+| Field | Meaning |
+|---|---|
+| `output` (required) | `application`: sound from the bound app's bundle plus bundles prefixed `<bundle_id>.` (for example the `…helper` processes where Chromium/Edge actually play web audio), refreshed about once a second so helpers started mid-take are included. `system`: all output except Showrun, **including unrelated notifications and other apps**. |
+| `include_bundle_ids` | Up to 8 extra bundle roots for `application` output, each with its `.`-prefixed helpers. Use for a web app installed as an Edge/Chrome app (for example `["com.microsoft.edgemac"]`). |
+| `microphone` | `true` also records an input device (macOS 15+). Default `false`. |
+| `microphone_device` | Exact device name or unique ID, for example `"BlackHole 2ch"` to capture a TTS clip routed as a fake microphone. Omit for the system default input. |
+| `require_signal` | Default `true`: any enabled source or the final track without signal fails the take with `audio_no_signal`. Set `false` only when silence is expected; silence is still reported. |
+
+Permissions: output audio falls under **Screen & System Audio Recording** for
+Showrun Desktop, the same grant as window capture. The microphone needs
+**Microphone** permission, which macOS only lists after an app asks. Run
+`showrun desktop-status --request-microphone` once, explicitly, to show that
+prompt; `record` never prompts. `desktop-status` reports `microphone`
+(`authorized`, `denied`, `not_determined`, `restricted`) and `audio.output_ready`
+/ `audio.microphone_ready`.
+
+Failures are explicit and happen before any window change or UI input when
+possible: `audio_unsupported` (web, Stories or Windows target; validation),
+`audio_unavailable` (companion older than desktop-v0.6.0, or microphone on
+macOS 14), `audio_permission_missing` (diagnostics list `missing_permissions`),
+`audio_device_not_found` and `audio_start_failed`. During or after the take:
+`audio_interrupted` (stream stopped, source error or format change),
+`audio_no_signal` and `audio_failed` (mux or verification failed; the delivered
+MP4 then has no audio track, `media.audio` is `none` and raw PCM stays in the take).
+Decodable footage is retained and labeled in these cases, never presented as a
+successful audio take.
+
+The companion writes raw 16-bit PCM for each source into a private directory in the take,
+placing each buffer by its host-clock timestamp (gaps become silence, overlaps
+are dropped). Showrun aligns it to the first window sample, trims or pads it to the
+exact video duration, mixes the microphone without normalization, and muxes one
+AAC 48 kHz stereo track. The raw files are deleted after the muxed file decodes.
+The model never receives audio.
+
+The receipt's `audio` block records `requested`, `permissions`, `status`
+(`captured`, `unavailable`, `failed`, `discarded_without_footage`), `scope`,
+`applications` (bundle IDs actually included), `filter_updates`, the
+`microphone_device` name and unique ID, and one row per source: `kind`, `sample_rate`, `channels`, `buffers`,
+`frames`, `captured_frames`, `gap_frames`, `dropped_frames`, companion
+`peak_dbfs`/`rms_dbfs`, independent FFmpeg `max_volume_db`/`mean_volume_db`, and
+`signal` (`present`, `silent` at or below -60 dBFS, or `none_received`). `track`
+repeats the independent measurement for the delivered AAC track. `sync` gives
+`audio_trim_seconds`, `precision_seconds` (0.3) and its method. Window samples
+are stamped when each screenshot completes, so the picture may trail the sound
+by up to one sample. `media.audio` is the codec (`aac`) or `none`, and
+`media.audio_stream` gives the stream parameters. `inspect` re-decodes both.
+
+Web recordings remain silent: Playwright/CDP exposes no audio track. To capture
+a web app with sound, record its browser window as a `macos` target instead.
 
 ## Lifecycle, budgets and retries
 
@@ -588,7 +699,8 @@ Input retains the first and latest frame in each 50ms bucket (at most 40 frames
 per second) to bound animated-page storage without dropping a final static update.
 Encoded frames arriving within a 250ms reorder window retain their original
 compositor timestamps and are ordered before encoding; larger regressions fail.
-MP4 H.264, no audio. Static compositor frames are held until the next frame.
+MP4 H.264. Web footage has no audio track; native macOS takes add one AAC track
+only when `capture.audio` is requested. Static compositor frames are held until the next frame.
 The receipt states 80ms timing precision and sampled-capture limitations.
 Per-step checks identify DOM evidence, first interaction, visible result and hold
 times; steps already satisfied without interaction have a null first-interaction.
@@ -786,7 +898,7 @@ select the named app’s only eligible on-screen window; multiple matches fail
 without input. An explicit title still selects an exact match. Initial bundle/title
 selection binds the same window; subsequent title changes are permitted. Do not
 switch tabs, panes, focus or type while recording. Update Showrun, then run
-`showrun prepare-desktop` to install the pinned desktop-v0.5.0 companion; no
+`showrun prepare-desktop` to install the pinned desktop-v0.6.0 companion; no
 compiler is required. Windows terminal mode is not supported: its existing
 click/fill and paced text-field entry do not provide terminal type/key actions.
 
