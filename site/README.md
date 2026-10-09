@@ -28,17 +28,11 @@ shared preview directory named after its repository, then serve that directory.
 
 ## GitHub Pages
 
-The Website workflow builds an artifact for relevant pull requests. On main,
-relevant pushes build and publish automatically. A successful completion of
-Refresh Amplifier Smart Tools manifests on main also triggers a build and publish
-from current main, including snapshot commits made by the refresh bot. Pull
-requests never deploy. Failed refresh runs do not trigger publication.
+The Website workflow builds a `github-pages` artifact for relevant pull requests and retains it for seven days. See the root [preview instructions](../README.md#review-a-website-preview) for downloading the exact run's `artifact.tar` and serving the static build. Pull requests never deploy.
 
-One-time repository setup: enable GitHub Pages with GitHub Actions as its source
-and allow main in the github-pages environment. After this workflow is merged,
-ongoing catalog changes and successful nightly refreshes publish automatically.
-The manual Website action remains available for explicit branch publication.
-All linked family sites must be published before cross-site navigation is live.
+On main, relevant pushes build and publish automatically. Either success or failure of a trusted Refresh Amplifier Smart Tools manifests run on main also triggers a validated build and publish from current main, including successful entry updates committed during a partially failed refresh. The workflow never consumes triggering-run code or artifacts. Metadata validation belongs to the canonical renderer and is also run by CI through `scripts/validate_catalog.py`.
+
+The existing GitHub Actions Pages setup and main environment policy remain unchanged. Manual publication is restricted to main; other revisions are preview-only. All linked family sites must be published before cross-site navigation is live.
 
 ## Shared identity
 
@@ -69,3 +63,44 @@ The overview illustration has a pause control that also pauses its title mark. R
 preferences select the still image by default. Shared media lives in
 `site/theme/assets/` and is included by the theme sync script. The original briefs
 and generation provenance live in `amplifier-smart-tools/site/artwork/`.
+
+## Catalog categories and Recommended
+
+The catalog uses the flat `categories.json` taxonomy and each listing's optional
+primary `category`. Keep category IDs stable and expose labels and scopes without
+turning categories into a hierarchy. Ordinary and not-yet-classified listings
+remain available.
+
+Each card shows its “Category: {label}” prefix and explicit recommendation state. Ordinary listings show “Not currently recommended”; cards without listings show “Category: Not yet classified” with the same neutral status. Effective recommendations and designations needing review retain their existing explicit labels.
+
+The current data classifies all 22 tools across nine categories, with zero
+unclassified tools and zero effective recommendations. The seven category
+additions and ordinary assignments are proposed for maintainer review, not
+already approved. See the root [category table](../README.md#categories-and-recommendations)
+for coverage; category scopes remain in `categories.json`. Missing classification
+is still valid for future source-pointer contributions, not an expected gap in
+the current 22-tool inventory.
+
+Explain “Recommended” as a maintainer-selected tool for a category at an exact
+reviewed source revision after conformance review and representative task
+scenarios under the [maintainer guide](../docs/maintainers.md). It is not
+certification, guaranteed outcomes, or proof of local readiness. Catalog metadata
+tests do not establish tool quality or completion of that review.
+
+Provide a “Recommended only” checkbox alongside search, platform, and primary
+category filters. It is unchecked by default, combines with the other filters,
+and includes only effective recommendations. “Recommendation needs review”
+designations do not qualify. Clear filters resets it; with JavaScript disabled,
+all tools remain visible. Keep the explainer and checkbox accessible.
+
+Show the recorded reviewed revision separately from snapshot provenance and
+refresh time. Source drift removes recommendation preference without removing
+the category or listing. The stale designation still occupies its category's
+slot. Digital Twin Universe and Smart Tool Creator remain ordinary classified
+listings with `recommended: false` and no `reviewed_source`, pending recorded
+review evidence. This is not a negative quality judgment.
+
+Keep review evidence free of credentials and private details. Preserve public
+source URLs and exact generated manifests. Implement shared rendering and
+metadata changes in the canonical theme, then sync; never patch the vendored
+copy independently.
