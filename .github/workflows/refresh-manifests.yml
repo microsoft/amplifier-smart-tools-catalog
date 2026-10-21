@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: refresh-manifests-main
@@ -21,6 +21,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    environment: refresh
     steps:
       - name: Check out main
         uses: actions/checkout@v4
@@ -56,9 +57,16 @@ jobs:
       - name: Push generated snapshot commit
         if: steps.commit.outputs.created == 'true'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          REFRESH_DEPLOY_KEY: ${{ secrets.REFRESH_DEPLOY_KEY }}
         run: |
-          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')" push origin HEAD:main
+          ssh_dir="$RUNNER_TEMP/refresh-ssh"
+          trap 'rm -rf "$ssh_dir"' EXIT
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$REFRESH_DEPLOY_KEY" > "$ssh_dir/key"
+          chmod 600 "$ssh_dir/key"
+          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+          GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes" \
+            git push "git@github.com:$GITHUB_REPOSITORY.git" HEAD:main
 
       - name: Fail when refresh reported errors
         if: always() && steps.refresh.outputs.exit_code != '0' && steps.refresh.outputs.exit_code != ''
