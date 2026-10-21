@@ -35,8 +35,8 @@ CATEGORY = {"id": "test-environments", "label": "Test environments", "scope": "I
 IDENTITY = {"repository": "https://example.test/tool.git", "path": ".", "commit": "a" * 40}
 # Synthetic source identity is test-only, never evidence of an actual evaluation.
 LISTING = {"category": CATEGORY["id"], "recommended": True, "reviewed_source": IDENTITY}
-# These 22 manifest-based assignments cover the current classification proposal.
-# New sources may remain unclassified: this is not a mandatory-listing schema.
+# Maintainer classifications that must survive refresh. New sources may remain
+# unclassified, and later classifications need not be added here.
 CURRENT_CLASSIFICATIONS = {
     "test-environments": ("digital-twin-universe",),
     "smart-tool-development": ("smart-tool-creator",),
@@ -48,18 +48,21 @@ CURRENT_CLASSIFICATIONS = {
     "music-listening": ("music-deck", "spotify"),
     "home-automation": ("home-assistant",),
 }
+# Selected commits are maintainer data in listing.json, renewed without test changes.
 CURRENT_SELECTIONS = {
     "digital-twin-universe": {
         "repository": "https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe.git",
         "path": ".",
-        "commit": "a4915ad2ce0846ea4221fb264e2557aa2463d1ed",
     },
     "smart-tool-creator": {
         "repository": "https://github.com/microsoft/amplifier-smart-tool-creator.git",
         "path": ".",
-        "commit": "a101e6f17ef86135393d105919d00522fcf59c55",
     },
 }
+
+
+def tool_count(count: int) -> str:
+    return f"{count} tool" if count == 1 else f"{count} tools"
 
 
 def write_json(path: Path, value: object) -> None:
@@ -379,7 +382,7 @@ class CatalogMetadataTests(unittest.TestCase):
         self.assertEqual(registry_file.read_bytes(), registry_before)
         self.assertNotEqual(old_review, before)
 
-    def test_current_22_tools_keep_nine_categories_and_two_selected_sources(self) -> None:
+    def test_current_classifications_keep_nine_categories_and_two_selected_sources(self) -> None:
         expected_categories = {
             "test-environments": (
                 "Test environments",
@@ -428,56 +431,44 @@ class CatalogMetadataTests(unittest.TestCase):
             for category, slugs in CURRENT_CLASSIFICATIONS.items()
             for slug in slugs
         }
-        self.assertEqual(len(expected_assignments), 22)
         categories, listings = load_catalog_metadata(ROOT)
         self.assertEqual(set(categories), set(expected_categories))
         sources = {source.parent.name for source in catalog_sources(ROOT)}
-        self.assertEqual(set(expected_assignments), sources)
-        self.assertEqual(set(listings), sources)
+        self.assertLessEqual(set(expected_assignments), sources)
+        self.assertLessEqual(set(listings), sources)
         for slug, category in expected_assignments.items():
             with self.subTest(tool=slug):
-                expected_listing = {"category": category, "recommended": slug in CURRENT_SELECTIONS}
-                if slug in CURRENT_SELECTIONS:
-                    expected_listing["reviewed_source"] = CURRENT_SELECTIONS[slug]
-                self.assertEqual(listings.get(slug), expected_listing)
-                raw_listing = read_json(ROOT / "tools" / slug / "listing.json", ROOT)
-                self.assertEqual(
-                    raw_listing,
-                    expected_listing if slug in CURRENT_SELECTIONS else {"category": category},
-                )
-        self.assertEqual(sum(listing["recommended"] for listing in listings.values()), 2)
-        self.assertEqual(sum(not listing["recommended"] for listing in listings.values()), 20)
-        counts = Counter(listings[slug]["category"] for slug in expected_assignments)
+                listing = listings.get(slug)
+                self.assertIsNotNone(listing)
+                self.assertEqual(listing["category"], category)
+                self.assertEqual(listing["recommended"], slug in CURRENT_SELECTIONS)
+                if slug not in CURRENT_SELECTIONS:
+                    raw_listing = read_json(ROOT / "tools" / slug / "listing.json", ROOT)
+                    self.assertEqual(raw_listing, {"category": category})
         self.assertEqual(
-            counts,
-            {
-                "test-environments": 1,
-                "smart-tool-development": 1,
-                "research-knowledge": 5,
-                "media-production": 5,
-                "presentations-documents": 1,
-                "developer-tools": 4,
-                "workplace-productivity": 2,
-                "music-listening": 2,
-                "home-automation": 1,
-            },
+            {slug for slug, listing in listings.items() if listing["recommended"]},
+            set(CURRENT_SELECTIONS),
         )
 
-    def test_selected_sources_match_current_main_snapshots_and_versions(self) -> None:
+    def test_selected_sources_keep_their_source_identity(self) -> None:
+        # Refresh may advance a snapshot past the selected commit; that is
+        # "needs review" until renewal, not a broken catalog.
         _, listings = load_catalog_metadata(ROOT)
-        versions = {"digital-twin-universe": "0.5.3", "smart-tool-creator": "0.3.0"}
         for slug, identity in CURRENT_SELECTIONS.items():
             with self.subTest(tool=slug):
                 entry = ROOT / "tools" / slug
                 pointer = validate_pointer(read_json(entry / "source.json", ROOT))
                 manifest, provenance = read_snapshot(entry, ROOT)
+                reviewed = listings[slug]["reviewed_source"]
                 self.assertEqual(pointer["repository"], identity["repository"])
-                self.assertEqual(pointer["ref"], "main")
-                self.assertEqual(pointer["path"], ".")
-                self.assertEqual(provenance["source"], {**identity, "ref": "main"})
-                self.assertEqual(str(manifest["version"]), versions[slug])
-                self.assertEqual(recommendation_state(pointer, provenance, listings[slug], bool(manifest)),
-                                 "recommended")
+                self.assertEqual(pointer["path"], identity["path"])
+                self.assertEqual(provenance["source"]["repository"], identity["repository"])
+                self.assertEqual(provenance["source"]["path"], identity["path"])
+                self.assertEqual({key: reviewed[key] for key in identity}, identity)
+                self.assertIn(
+                    recommendation_state(pointer, provenance, listings[slug], bool(manifest)),
+                    {"recommended", "needs-review"},
+                )
 
     def test_real_classifications_remain_valid_metadata_after_snapshot_refresh(self) -> None:
         seed_root = self.root / "seeds"
@@ -779,21 +770,25 @@ class CatalogMetadataTests(unittest.TestCase):
         )
         recommended_slugs = {slug for ordinary, slug, _ in expected if not ordinary}
         self.assertEqual({card["slug"] for card in cards[:len(recommended_slugs)]}, recommended_slugs)
-        self.assertIn('<p class="catalog-count" id="result-count" role="status">22 tools</p>', document)
-        self.assertIn('<span class="catalog-count" id="other-count">22 tools</span>', document)
-        self.assertIn('<span class="catalog-count" id="recommended-count">2 tools</span>', document)
+        total = len(expected_labels)
+        unclassified = total - len(listings)
+        self.assertIn(f'<p class="catalog-count" id="result-count" role="status">{tool_count(total)}</p>', document)
+        self.assertIn(f'<span class="catalog-count" id="other-count">{tool_count(total)}</span>', document)
+        self.assertIn(
+            f'<span class="catalog-count" id="recommended-count">{tool_count(len(recommended_slugs))}</span>',
+            document,
+        )
         self.assertEqual(len(cards), len(expected))
         self.assertEqual(sum(bool(card["category"]) for card in cards), len(listings) + len(recommended_slugs))
         self.assertEqual(
             sum(card["category"] == "" for card in cards),
             len(expected) - len(listings) - len(recommended_slugs),
         )
-        self.assertEqual(len(expected_labels), 22)
         self.assertEqual(set(expected_labels), {card["slug"] for card in cards})
-        self.assertEqual(recommended_slugs, set(CURRENT_SELECTIONS))
-        self.assertEqual(document.count('data-recommended="true"'), 4)
-        self.assertEqual(document.count('data-recommended="false"'), 20)
-        self.assertEqual(len({card["slug"] for card in cards}), 22)
+        self.assertLessEqual(recommended_slugs, set(CURRENT_SELECTIONS))
+        self.assertEqual(document.count('data-recommended="true"'), 2 * len(recommended_slugs))
+        self.assertEqual(document.count('data-recommended="false"'), total - len(recommended_slugs))
+        self.assertEqual(len({card["slug"] for card in cards}), total)
         for card in cards:
             text = " ".join(card["text"].split())
             self.assertIn(expected_labels[card["slug"]], text)
@@ -826,8 +821,8 @@ class CatalogMetadataTests(unittest.TestCase):
         category_end = document.index('</select>', category_start)
         category_select = document[category_start:category_end]
         self.assertEqual(len(categories), 9)
-        self.assertEqual(category_select.count('<option value="'), 10)
-        self.assertNotIn('value="__unclassified__"', category_select)
+        self.assertEqual(category_select.count('<option value="'), 10 + bool(unclassified))
+        self.assertEqual('value="__unclassified__"' in category_select, bool(unclassified))
         self.assertNotIn("category-navigation", document)
         self.assertNotIn("data-category-filter", document)
         for identity, category in categories.items():
@@ -866,15 +861,15 @@ class CatalogMetadataTests(unittest.TestCase):
             group_members[group] += 1
             if card["slug"] in recommended_slugs:
                 self.assertEqual(card["badges"], [["recommendation", "recommended"]])
-        self.assertEqual(len(featured_cards), 2)
-        self.assertEqual(len(all_tool_cards), 22)
-        self.assertEqual(len({card["slug"] for card in all_tool_cards}), 22)
+        self.assertEqual(len(featured_cards), len(recommended_slugs))
+        self.assertEqual(len(all_tool_cards), total)
+        self.assertEqual(len({card["slug"] for card in all_tool_cards}), total)
         self.assertEqual(
             group_members,
-            Counter(listing["category"] for listing in listings.values()),
+            Counter(listings[slug]["category"] if slug in listings else "__unclassified__" for slug in expected_labels),
         )
-        self.assertEqual(set(group_members), set(categories))
-        self.assertEqual(sum(group_members.values()), 22)
+        self.assertEqual(set(group_members), set(categories) | ({"__unclassified__"} if unclassified else set()))
+        self.assertEqual(sum(group_members.values()), total)
         for identity in categories:
             self.assertGreater(group_members[identity], 0)
             self.assertIn(f'id="category-group-{identity}"', document)
