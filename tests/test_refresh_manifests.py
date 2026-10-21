@@ -52,8 +52,7 @@ class RefreshManifestsTests(unittest.TestCase):
             "Implement an explicit maintainer selection by setting `recommended: true`",
             readme,
         )
-        self.assertIn("two are Recommended, 20 are ordinary listings", readme)
-        self.assertIn("zero are unclassified", readme)
+        self.assertIn("Source-pointer contributions may omit classification", readme)
         self.assertIn("maintainer-curated preference", readme)
         self.assertIn("not completed conformance reviews or task evaluations", readme)
         self.assertIn("not certification", readme)
@@ -202,7 +201,7 @@ This repository does not make a response-time commitment.""",
             "selected recorded source revision",
             "not certification, guaranteed outcomes, or proof of local readiness",
             "Keep Recommended separate from All tools",
-            "all 22 unique listings stay visible in All tools",
+            "all unique listings stay visible in All tools",
             "All tools counts report unique listings, not rendered card instances",
             "Hide the entire Recommended region when its effective matching count is zero",
             "Do not render a Recommended empty-state message, recommendation-specific details disclosure, or explanation link",
@@ -218,7 +217,7 @@ This repository does not make a response-time commitment.""",
         self.assertIn("One control bar sits above all results", readme)
         self.assertIn(
             "Without JavaScript, the control bar and Name list stay hidden, all "
-            "22 unique listings remain visible in All tools alongside the two featured shortcuts",
+            "unique listings remain visible in All tools alongside the featured shortcuts",
             readme,
         )
 
