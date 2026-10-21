@@ -57,7 +57,7 @@ All 22 current tools are classified across these nine categories: two are Recomm
 | Music & playlists | 2 | `music-deck`, `spotify` |
 | Smart home | 1 | `home-assistant` |
 
-Digital Twin Universe is Recommended for Test environments at source commit `a4915ad2ce0846ea4221fb264e2557aa2463d1ed` (manifest version 0.5.3). Smart Tool Creator is Recommended for Smart Tool development at source commit `a101e6f17ef86135393d105919d00522fcf59c55` (manifest version 0.3.0). Their categories are retained; all other 20 listings remain ordinary. These designations record maintainer-curated preference, not completed conformance reviews or task evaluations.
+Digital Twin Universe is Recommended for Test environments at source commit `4dda28bebfa47a6db7b53b803b4f16778c5ea91d` (manifest version 0.6.4). Smart Tool Creator is Recommended for Smart Tool development at source commit `569242ddf4ddcb4cc4e1b8f85af7e0252597ae04` (manifest version 0.3.3). Their categories are retained; all other 20 listings remain ordinary. These designations record maintainer-curated preference, not completed conformance reviews or task evaluations.
 
 “Recommended” means a maintainer-curated preference for a tool in a category at a selected recorded source revision. It is not certification, a guarantee of outcomes, or a claim that the tool is installed or ready on this machine. It does not authorize installation, execution, spending, or access to secrets. The tool's own manifest still determines whether it fits the request. Catalog metadata tests check structure and source identity, not tool quality or completed evaluation.
 
