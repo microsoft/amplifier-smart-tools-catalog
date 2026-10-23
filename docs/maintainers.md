@@ -6,9 +6,9 @@ Submissions are source-only and category-agnostic. Submitters do not add, choose
 
 ## Roles and selection
 
-Only catalog maintainers select the tool, primary category, and source revision and initiate designations, renewals, replacements, and withdrawals. Maintainers select, initiate, and promote; they are not merely approvers of creators' promotion requests. Contributors or agents may edit recommendation metadata only to implement an explicit maintainer decision, not make the selection. A creator request or PR authorship cannot authorize a recommendation.
+Only catalog maintainers select the tool, primary category, and source and initiate designations, renewals, replacements, and withdrawals. Maintainers select, initiate, and promote; they are not merely approvers of creators' promotion requests. Contributors or agents may edit recommendation metadata only to implement an explicit maintainer decision, not make the selection. A creator request or PR authorship cannot authorize a recommendation.
 
-Before merging a designation, renewal, or replacement, record the selection decision, category, and exact selected source identity in the pull request or repository maintainer notes. Recommendation means maintainer-curated preference at a selected recorded source revision. Implement an explicit maintainer selection without imposing a new conformance or task-evaluation gate. Do not claim that selection proves validation or that anyone completed a review.
+Before merging a designation, renewal, or replacement, record the selection decision, category, and exact selected source identity in the pull request or repository maintainer notes. Recommendation means maintainer-curated preference for a selected source repository and distribution path. Implement an explicit maintainer selection without imposing a new conformance or task-evaluation gate. Do not claim that selection proves validation or that anyone completed a review.
 
 Keep the metadata field name `reviewed_source` for schema compatibility: it records selected source identity, not proof of conformance or task results. A matching source identity or passing catalog tests establishes source binding and structure, not tool quality.
 
@@ -26,7 +26,7 @@ Maintainers may review stability, conformance against the applicable Smart Tool 
 
 Agree evaluation criteria before executing candidate workflows. Start with read-only operations and isolated resources; do not mutate live user sessions or infer permission to spend or access secrets from a listing. Missing evaluation evidence means validation has not been demonstrated, not that a selection is forbidden or a tool failed. Never invent evaluation models, results, or review confirmation.
 
-Catalog metadata validation and rendering tests check structure, classification, source identity, and drift behavior. They do not evaluate tool quality, prove completed evaluation, or establish selection authority. “Recommended” is revision-scoped editorial judgment, not certification, guaranteed results, or proof of local installation, prerequisites, provider setup, or readiness.
+Catalog metadata validation and rendering tests check structure, classification, source identity, and drift behavior. They do not evaluate tool quality, prove completed evaluation, or establish selection authority. “Recommended” is source-scoped editorial judgment, not certification, guaranteed results, or proof of local installation, prerequisites, provider setup, or readiness.
 
 ## Categories
 
@@ -43,21 +43,22 @@ The ordinary metadata form is `{"category": "test-environments"}`. `category` is
 
 ## Metadata procedures
 
-- Designate only after maintainers select the tool, category, and revision and initiate the designation; record `recommended: true` and the exact `reviewed_source`.
-- Renew only after maintainers select the revision and initiate renewal; update `reviewed_source` to its exact repository, distribution path, and full commit. Never advance the selected commit automatically.
+- Designate only after maintainers select the tool, category, and source and initiate the designation; record `recommended: true` and the exact `reviewed_source`.
+- Renew only after maintainers select the source and initiate renewal; update `reviewed_source` to its exact repository and distribution path. Newer upstream commits on the tracked ref need no renewal.
 - Withdraw only after maintainers initiate withdrawal; remove `recommended` and `reviewed_source` to leave the category-only ordinary form. An explicit false flag is also valid. Keep the ordinary classified listing unless its removal is separately justified. Record the decision and rationale.
 - Replace only after maintainers select the replacement and initiate replacement; withdraw the old designation and add the new one in the same change. The one-designation-per-category limit still applies.
 
 `reviewed_source` is selected source identity metadata, neither an installer nor certification.
 Effective recommendation requires agreement with the source pointer and
-snapshot provenance on repository, distribution path, and commit. Drift keeps
-the listing, category, and designation, but displays “Recommendation needs
-review” and removes recommendation preference. The stale designation still
-occupies its category's slot.
+snapshot provenance on repository and distribution path. A newer upstream
+commit on the tracked ref keeps it effective. Drift keeps the listing,
+category, and designation, but displays “Recommendation needs review” and
+removes recommendation preference. The stale designation still occupies its
+category's slot.
 
-Automatic refresh must preserve `categories.json`, listings, and reviewed
-commits byte for byte. Do not hand-edit generated manifests or provenance to
-make identities agree; renewal is a deliberate maintainer selection.
+Automatic refresh must preserve `categories.json` and listings byte for byte.
+Do not hand-edit generated manifests or provenance to make identities agree;
+renewal is a deliberate maintainer selection.
 
 ## Evidence and enforcement
 
