@@ -80,7 +80,7 @@ This repository does not make a response-time commitment.""",
         self.assertIn("contents: read", workflow)
         self.assertIn("runs-on: ubuntu-latest", workflow)
         self.assertIn("persist-credentials: false", workflow)
-        self.assertIn("actions/setup-python@v5", workflow)
+        self.assertRegex(workflow, r"actions/setup-python@[0-9a-f]{40} ")
         self.assertIn("python3 -m pip install -r site/requirements.txt", workflow)
         self.assertIn("PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_catalog.py", workflow)
         self.assertIn("PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v", workflow)

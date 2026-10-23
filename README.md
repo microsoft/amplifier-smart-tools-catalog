@@ -116,7 +116,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m http.server 8000 --bind 127.0.0.1 --directo
 
 Open `http://127.0.0.1:8000` to inspect the static build. That address is only a local serving address, not source provenance or a public deployment. The source revision is the one shown on the selected GitHub run. The Actions UI also offers the same `github-pages` download as a ZIP containing `artifact.tar`; extract the ZIP into the chosen download directory before using the tar command.
 
-After either a successful or failed trusted main refresh, the Website workflow rebuilds validated current `main`. A refresh may have committed successful entries before reporting another entry's failure, so a failure must not leave an outdated recommendation badge published. The workflow ignores triggering-run artifacts and never deploys untrusted pull-request content. Manual publication is restricted to `main`; other revisions are preview-only.
+The refresh workflow pushes its snapshot commit with a deploy key, so the push starts the Website workflow, which rebuilds and publishes `main`. This includes a refresh that commits successful entries before it reports another entry's failure, so a failure does not leave an outdated recommendation badge published. The workflow never deploys untrusted pull-request content. Manual publication is restricted to `main`; other revisions are preview-only.
 
 This project welcomes contributions and suggestions. Most contributions require
 you to agree to a Contributor License Agreement (CLA) declaring that you have
