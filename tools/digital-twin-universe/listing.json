@@ -3,7 +3,6 @@
   "recommended": true,
   "reviewed_source": {
     "repository": "https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe.git",
-    "path": ".",
-    "commit": "4dda28bebfa47a6db7b53b803b4f16778c5ea91d"
+    "path": "."
   }
 }

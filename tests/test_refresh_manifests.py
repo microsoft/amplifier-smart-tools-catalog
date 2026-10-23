@@ -105,7 +105,7 @@ This repository does not make a response-time commitment.""",
         catalog_root = SCRIPT.parents[1]
         guide = re.sub(r"\s+", " ", (catalog_root / "docs" / "maintainers.md").read_text())
         self.assertIn("This guide is normative", guide)
-        self.assertIn("Only catalog maintainers select the tool, primary category, and source revision", guide)
+        self.assertIn("Only catalog maintainers select the tool, primary category, and source", guide)
         self.assertIn("select, initiate, and promote", guide)
         self.assertIn("to implement an explicit maintainer decision, not make the selection", guide)
         self.assertIn("request or PR authorship cannot authorize a recommendation", guide)
@@ -154,7 +154,7 @@ This repository does not make a response-time commitment.""",
             with self.subTest(file=relative):
                 text = re.sub(r"\s+", " ", (catalog_root / relative).read_text())
                 self.assertIn("maintainer-curated preference", text.lower())
-                self.assertIn("selected recorded source revision", text)
+                self.assertIn("selected source repository and distribution path", text)
                 self.assertRegex(text, r"schema(?:-| )compatib(?:le|ility)")
                 if relative == "AGENTS.md":
                     self.assertIn("not proof of validation", text)
@@ -198,7 +198,7 @@ This repository does not make a response-time commitment.""",
             "flat `categories.json` taxonomy",
             "primary `category`",
             "maintainer-curated preference",
-            "selected recorded source revision",
+            "selected source repository and distribution path",
             "not certification, guaranteed outcomes, or proof of local readiness",
             "Keep Recommended separate from All tools",
             "all unique listings stay visible in All tools",
@@ -358,7 +358,7 @@ This repository does not make a response-time commitment.""",
             listing = (
                 b'{ "category": "test-environments", "recommended": true, '
                 b'"reviewed_source": {"repository": "https://example.test/tool.git", '
-                b'"path": ".", "commit": "' + b"a" * 40 + b'"} }\r\n'
+                b'"path": "."} }\r\n'
             )
             categories = b'{ "categories": [{"id":"test-environments","label":"Tests","scope":"Testing."}] }\r\n'
             (entry / "source.json").write_bytes(pointer)

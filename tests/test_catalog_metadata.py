@@ -32,7 +32,8 @@ from catalog_metadata import (
 
 
 CATEGORY = {"id": "test-environments", "label": "Test environments", "scope": "Isolated testing."}
-IDENTITY = {"repository": "https://example.test/tool.git", "path": ".", "commit": "a" * 40}
+IDENTITY = {"repository": "https://example.test/tool.git", "path": "."}
+COMMIT = "a" * 40
 # Synthetic source identity is test-only, never evidence of an actual evaluation.
 LISTING = {"category": CATEGORY["id"], "recommended": True, "reviewed_source": IDENTITY}
 # Maintainer classifications that must survive refresh. New sources may remain
@@ -48,7 +49,7 @@ CURRENT_CLASSIFICATIONS = {
     "music-listening": ("music-deck", "spotify"),
     "home-automation": ("home-assistant",),
 }
-# Selected commits are maintainer data in listing.json, renewed without test changes.
+# Selected sources are maintainer data in listing.json and follow the tracked ref.
 CURRENT_SELECTIONS = {
     "digital-twin-universe": {
         "repository": "https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe.git",
@@ -156,7 +157,7 @@ class CatalogMetadataTests(unittest.TestCase):
         write_json(
             entry / "provenance.json",
             {
-                "source": {**IDENTITY, "ref": "main"},
+                "source": {**IDENTITY, "commit": COMMIT, "ref": "main"},
                 "original_manifest_path": "SMART_TOOL.md",
                 "last_success": "2026-10-07T03:38:13Z",
             },
@@ -265,7 +266,7 @@ class CatalogMetadataTests(unittest.TestCase):
     def test_stale_designation_still_reserves_the_category(self) -> None:
         provenance = self.root / "tools" / "tool" / "provenance.json"
         value = json.loads(provenance.read_text())
-        value["source"]["commit"] = "b" * 40
+        value["source"]["path"] = "another"
         write_json(provenance, value)
         # Drift is a valid editorial state, not permission to award the slot twice.
         _, listings = load_catalog_metadata(self.root)
@@ -334,14 +335,14 @@ class CatalogMetadataTests(unittest.TestCase):
 
     def test_reviewed_source_identity_validation(self) -> None:
         invalid = [None, [], True, {}]
-        for field in ("repository", "path", "commit"):
+        for field in ("repository", "path"):
             for bad in (None, False, 7, "", [], {}):
                 invalid.append({**IDENTITY, field: bad})
             invalid.append({key: value for key, value in IDENTITY.items() if key != field})
         invalid.extend(
             [
-                {**IDENTITY, "commit": "a" * 7},
-                {**IDENTITY, "commit": "g" * 40},
+                {**IDENTITY, "commit": COMMIT},
+                {**IDENTITY, "ref": "main"},
                 {**IDENTITY, "repository": "http://example.test/tool.git"},
                 {**IDENTITY, "repository": "https://user:password@example.test/tool.git"},
                 {**IDENTITY, "repository": "https://example.test/tool.git?secret=example"},
@@ -372,8 +373,8 @@ class CatalogMetadataTests(unittest.TestCase):
         registry_before = registry_file.read_bytes()
         before = listing_file.read_bytes()
         changed = copy.deepcopy(LISTING)
-        changed["reviewed_source"]["commit"] = "b" * 40
-        # A well-formed older review is valid metadata but not a renewed endorsement.
+        changed["reviewed_source"]["path"] = "another"
+        # A well-formed review of another path is valid metadata but not a renewed endorsement.
         write_json(listing_file, changed)
         old_review = listing_file.read_bytes()
         _, listings = load_catalog_metadata(self.root)
@@ -451,8 +452,8 @@ class CatalogMetadataTests(unittest.TestCase):
         )
 
     def test_selected_sources_keep_their_source_identity(self) -> None:
-        # Refresh may advance a snapshot past the selected commit; that is
-        # "needs review" until renewal, not a broken catalog.
+        # Refresh may advance a snapshot to a newer upstream commit; the
+        # selection follows the tracked ref.
         _, listings = load_catalog_metadata(ROOT)
         for slug, identity in CURRENT_SELECTIONS.items():
             with self.subTest(tool=slug):
@@ -465,9 +466,9 @@ class CatalogMetadataTests(unittest.TestCase):
                 self.assertEqual(provenance["source"]["repository"], identity["repository"])
                 self.assertEqual(provenance["source"]["path"], identity["path"])
                 self.assertEqual({key: reviewed[key] for key in identity}, identity)
-                self.assertIn(
+                self.assertEqual(
                     recommendation_state(pointer, provenance, listings[slug], bool(manifest)),
-                    {"recommended", "needs-review"},
+                    "recommended",
                 )
 
     def test_real_classifications_remain_valid_metadata_after_snapshot_refresh(self) -> None:
@@ -490,7 +491,7 @@ class CatalogMetadataTests(unittest.TestCase):
             manifest, provenance = read_snapshot(seed_root / "tools" / slug, seed_root)
             self.assertEqual(
                 recommendation_state(pointer, provenance, listings[slug], bool(manifest)),
-                "needs-review" if slug in CURRENT_SELECTIONS else "ordinary",
+                "recommended" if slug in CURRENT_SELECTIONS else "ordinary",
             )
             self.assertEqual(listing_file.read_bytes(), before)
 
@@ -534,6 +535,12 @@ class CatalogMetadataTests(unittest.TestCase):
         )
         self.assertEqual(recommendation_state(pointer, provenance, LISTING, False), "needs-review")
         self.assertEqual(recommendation_state(pointer, {}, LISTING), "needs-review")
+        advanced = copy.deepcopy(provenance)
+        advanced["source"]["commit"] = "b" * 40
+        self.assertEqual(recommendation_state(pointer, advanced, LISTING), "recommended")
+        self.assertEqual(
+            recommendation_state({**pointer, "ref": COMMIT}, advanced, LISTING), "needs-review"
+        )
         for field, value in (
             ("repository", "https://example.test/another.git"),
             ("path", "another"),
@@ -546,7 +553,6 @@ class CatalogMetadataTests(unittest.TestCase):
         for field, value in (
             ("repository", "https://example.test/another.git"),
             ("path", "another"),
-            ("commit", "b" * 40),
         ):
             changed = copy.deepcopy(LISTING)
             changed["reviewed_source"][field] = value
@@ -565,6 +571,13 @@ class CatalogMetadataTests(unittest.TestCase):
         provenance_path = self.root / "tools" / "tool" / "provenance.json"
         provenance = read_json(provenance_path, self.root)
         provenance["source"]["commit"] = "b" * 40
+        write_json(provenance_path, provenance)
+        advanced = CatalogCards(rendered_catalog(self.root)).cards
+        self.assertEqual(advanced[1]["badges"], [["recommendation", "recommended"]])
+        # The distribution path moved away from the reviewed source.
+        pointer_path = self.root / "tools" / "tool" / "source.json"
+        write_json(pointer_path, {"repository": IDENTITY["repository"], "path": "another"})
+        provenance["source"]["path"] = "another"
         write_json(provenance_path, provenance)
         after = rendered_catalog(self.root)
         cards = CatalogCards(after).cards
@@ -629,7 +642,7 @@ class CatalogMetadataTests(unittest.TestCase):
         self.assertNotIn("What does Recommended mean?", document)
         self.assertNotIn("Not currently recommended", document)
         self.assertIn('<details><summary>Full description and source</summary>', document)
-        self.assertIn(f'Source commit: <code>{IDENTITY["commit"]}</code>', document)
+        self.assertIn(f'Source commit: <code>{COMMIT}</code>', document)
         self.assertIn("Snapshot refreshed:", document)
         parsed = CatalogCards(document)
         self.assertEqual([card["slug"] for card in parsed.cards], ["tool", "tool"])
@@ -702,30 +715,28 @@ class CatalogMetadataTests(unittest.TestCase):
         self.assertNotIn('data-recommended="true"', document)
         self.assertNotIn('value="__unclassified__"', document)
 
-    def test_both_selected_sources_lose_preference_on_drift_without_renewal(self) -> None:
-        drifted = self.root / "drifted"
-        write_json(drifted / "categories.json", read_json(ROOT / "categories.json", ROOT))
+    def test_both_selected_sources_keep_preference_when_upstream_advances(self) -> None:
+        advanced = self.root / "advanced"
+        write_json(advanced / "categories.json", read_json(ROOT / "categories.json", ROOT))
         original_listings = {}
         for slug in CURRENT_SELECTIONS:
-            entry = drifted / "tools" / slug
+            entry = advanced / "tools" / slug
             entry.mkdir(parents=True)
             for name in ("source.json", "listing.json", "provenance.json", "SMART_TOOL.md"):
                 (entry / name).write_bytes((ROOT / "tools" / slug / name).read_bytes())
             original_listings[slug] = (entry / "listing.json").read_bytes()
-            provenance = read_json(entry / "provenance.json", drifted)
+            provenance = read_json(entry / "provenance.json", advanced)
             provenance["source"]["commit"] = "b" * 40
             write_json(entry / "provenance.json", provenance)
-        document = rendered_catalog(drifted)
+        document = rendered_catalog(advanced)
         parsed = CatalogCards(document)
         self.assertEqual({card["slug"] for card in parsed.cards}, set(CURRENT_SELECTIONS))
-        self.assertEqual(len(parsed.cards), 2)
-        self.assertNotIn('data-recommended="true"', document)
-        for card in parsed.cards:
-            slug = card["slug"]
-            self.assertEqual(card["badges"], [["recommendation", "needs-review"]])
-            self.assertEqual((drifted / "tools" / slug / "listing.json").read_bytes(), original_listings[slug])
+        self.assertEqual(document.count('data-recommended="true"'), 2 * len(CURRENT_SELECTIONS))
+        self.assertNotIn("Recommendation needs review", document)
+        for slug in CURRENT_SELECTIONS:
+            self.assertEqual((advanced / "tools" / slug / "listing.json").read_bytes(), original_listings[slug])
             self.assertTrue(any(
-                tag == "section" and attrs.get("id") == "other-tools"
+                tag == "section" and attrs.get("id") == "recommended-region"
                 for tag, attrs in parsed.card_ancestors[slug][0]
             ))
 

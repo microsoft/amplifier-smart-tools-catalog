@@ -165,10 +165,9 @@ def validate_listing(data, categories):
     if type(recommended) is not bool:
         raise ValueError('recommended must be a boolean when provided')
     if recommended:
-        reviewed = closed(data.get('reviewed_source'), ('repository', 'path', 'commit'))
+        reviewed = closed(data.get('reviewed_source'), ('repository', 'path'))
         repository(reviewed['repository'])
         relative_path(reviewed['path'])
-        commit(reviewed['commit'])
     elif 'reviewed_source' in data:
         raise ValueError('An ordinary listing must not carry reviewed_source')
     # Normalize in memory only; never add defaults to the caller's editorial data.
@@ -240,7 +239,7 @@ def recommendation_state(pointer, provenance, listing, snapshot_present=True):
     source = validate_provenance(provenance)['source']
     reviewed = listing['reviewed_source']
     if (any(pointer[k] != source[k] for k in ('repository', 'ref', 'path')) or
-            any(reviewed[k] != source[k] for k in ('repository', 'path', 'commit')) or
+            any(reviewed[k] != source[k] for k in ('repository', 'path')) or
             (COMMIT.fullmatch(pointer['ref']) and pointer['ref'] != source['commit'])):
         return 'needs-review'
     return 'recommended'
