@@ -6,10 +6,6 @@ on:
   push:
     branches: [main]
     paths: ['site/**', 'docs/images/**', 'tools/**', 'categories.json', 'scripts/**', 'tests/**', '.github/workflows/website.yml']
-  workflow_run:
-    workflows: [Refresh Amplifier Smart Tools manifests]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
@@ -30,25 +26,12 @@ concurrency:
 
 jobs:
   build:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.head_repository.full_name == github.repository &&
-       github.event.workflow_run.head_branch == 'main' &&
-       (github.event.workflow_run.event == 'push' ||
-        github.event.workflow_run.event == 'schedule' ||
-        github.event.workflow_run.event == 'workflow_dispatch') &&
-       (github.event.workflow_run.conclusion == 'success' ||
-        github.event.workflow_run.conclusion == 'failure'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Refresh bot commits do not trigger push workflows. Build current main
-          # after success OR failure: a failed refresh may commit partial updates.
-          # Never use artifacts or code supplied by the triggering run.
-          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Install website build dependencies
@@ -57,7 +40,7 @@ jobs:
         env:
           FAMILY_OWNER: ${{ inputs.family_owner || (github.repository_owner == 'microsoft' && 'microsoft' || 'robotdad') }}
         run: python site/theme/build.py --family-owner "$FAMILY_OWNER"
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
           retention-days: 7
@@ -65,7 +48,6 @@ jobs:
   deploy:
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_run' && needs.build.result == 'success') ||
       (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
@@ -78,4 +60,4 @@ jobs:
     steps:
       - name: Deploy website
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
