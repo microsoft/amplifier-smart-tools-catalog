@@ -40,6 +40,7 @@ LISTING = {"category": CATEGORY["id"], "recommended": True, "reviewed_source": I
 # unclassified, and later classifications need not be added here.
 CURRENT_CLASSIFICATIONS = {
     "test-environments": ("digital-twin-universe",),
+    "builder-tools": ("reality-check",),
     "smart-tool-development": ("smart-tool-creator",),
     "research-knowledge": ("deep-research", "fact-check", "hacker-news", "lore", "team-pulse"),
     "media-production": ("aud", "vid", "outtake", "unfold", "showrun"),
@@ -383,11 +384,15 @@ class CatalogMetadataTests(unittest.TestCase):
         self.assertEqual(registry_file.read_bytes(), registry_before)
         self.assertNotEqual(old_review, before)
 
-    def test_current_classifications_keep_nine_categories_and_two_selected_sources(self) -> None:
+    def test_current_classifications_keep_ten_categories_and_two_selected_sources(self) -> None:
         expected_categories = {
             "test-environments": (
                 "Test environments",
                 "Create and operate isolated environments for testing software and reproducing failures.",
+            ),
+            "builder-tools": (
+                "Builder tools",
+                "Hand off more of the work when you build with AI, and spend your time on what matters.",
             ),
             "smart-tool-development": (
                 "Smart Tool development",
@@ -831,8 +836,8 @@ class CatalogMetadataTests(unittest.TestCase):
         category_start = document.index('<select id="category"')
         category_end = document.index('</select>', category_start)
         category_select = document[category_start:category_end]
-        self.assertEqual(len(categories), 9)
-        self.assertEqual(category_select.count('<option value="'), 10 + bool(unclassified))
+        self.assertEqual(len(categories), 10)
+        self.assertEqual(category_select.count('<option value="'), 11 + bool(unclassified))
         self.assertEqual('value="__unclassified__"' in category_select, bool(unclassified))
         self.assertNotIn("category-navigation", document)
         self.assertNotIn("data-category-filter", document)

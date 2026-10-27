@@ -473,12 +473,12 @@ This repository does not make a response-time commitment.""",
                 redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(refresh_manifests.refresh(root, 1), 0)
-            self.assertEqual(len(list(root.glob("tools/*/listing.json"))), 20)
+            self.assertEqual(len(list(root.glob("tools/*/listing.json"))), 21)
             for path, raw in before.items():
                 self.assertEqual(path.read_bytes(), raw)
             from catalog_metadata import load_catalog_metadata
             _, listings = load_catalog_metadata(root)
-            self.assertEqual(len(listings), 20)
+            self.assertEqual(len(listings), 21)
             self.assertTrue(all(not listing["recommended"] for listing in listings.values()))
             for path, raw in before.items():
                 self.assertEqual(path.read_bytes(), raw)

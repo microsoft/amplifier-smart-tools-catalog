@@ -45,19 +45,7 @@ Classifications are based on the work described in the exact, commit-pinned publ
 
 Classification and recommendation are not completed tool evaluations. Source-pointer contributions may omit classification; those tools appear under Other until maintainers assign a category.
 
-| Category | Tools | Current listings |
-|---|---:|---|
-| Test environments | 1 | `digital-twin-universe` |
-| Smart Tool development | 1 | `smart-tool-creator` |
-| Research & knowledge | 5 | `deep-research`, `fact-check`, `hacker-news`, `lore`, `team-pulse` |
-| Audio, video & animation | 5 | `aud`, `vid`, `outtake`, `unfold`, `showrun` |
-| Presentations & documents | 1 | `stories` |
-| App design & developer tools | 4 | `possibly`, `fast-decisions`, `github-repos`, `tmux` |
-| Email, calendar & work preparation | 2 | `gmail`, `workiq` |
-| Music & playlists | 2 | `music-deck`, `spotify` |
-| Smart home | 1 | `home-assistant` |
-
-Digital Twin Universe is Recommended for Test environments and Smart Tool Creator for Smart Tool development. Each selected source repository and distribution path is recorded in the tool's `listing.json`. All other listings are ordinary. These designations record maintainer-curated preference, not completed conformance reviews or task evaluations.
+Each recommended tool's selected source repository and distribution path is recorded in its `listing.json`. All other listings are ordinary. These designations record maintainer-curated preference, not completed conformance reviews or task evaluations.
 
 “Recommended” means a maintainer-curated preference for a tool in a category, bound to a selected source repository and distribution path. It is not certification, a guarantee of outcomes, or a claim that the tool is installed or ready on this machine. It does not authorize installation, execution, spending, or access to secrets. The tool's own manifest still determines whether it fits the request. Catalog metadata tests check structure and source identity, not tool quality or completed evaluation.
 
