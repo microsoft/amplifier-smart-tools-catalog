@@ -95,7 +95,7 @@ harness is not part of the offline checks.
 Install the local dependency with the tool:
 
 ```bash
-uv tool install 'amplifier-fast-decisions[local] @ git+https://github.com/michaeljabbour/amplifier-bundle-fast-decisions@main'
+uv tool install 'amplifier-smart-tool-fast-decisions[local] @ git+https://github.com/michaeljabbour/amplifier-smart-tool-fast-decisions@main'
 # Set TYPESAFE_API_KEY privately in the harness environment.
 amplifier-fast-decisions manifest
 amplifier-fast-decisions install-skill --host all
