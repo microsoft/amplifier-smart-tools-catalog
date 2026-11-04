@@ -1,7 +1,7 @@
 ---
 smart_tool_format: 1
 name: digital-twin-universe
-version: 0.6.6
+version: 0.6.9
 description: >-
   Stands up an isolated, realistic environment from a profile on Docker Compose so software can be cloned, installed, run, and experienced like a real user would, without touching the host. Use when passing tests on your machine is not enough evidence and code must be exercised as though actually deployed
 use_cases:
@@ -116,7 +116,9 @@ writing a profile of your own; `docs/03-profile.md` in the repository is the sch
 `examples/hello/` is the smallest universe, an Alpine twin with nothing installed: launch it to
 try `exec` on a machine you have not used the tool on before. `examples/web-site/` is a site
 opened from the host's browser at the URLs its `x-dtu.urls` names; read it before writing a
-profile for a web app. `examples/amplifier-modules-dtu/` installs Amplifier from GitHub with
+profile for a web app. `examples/web-tester/` puts a headless browser an agent scripts and
+screenshots beside a web app it opens over HTTPS; copy its `browser` service to test a web app
+from inside the universe. `examples/amplifier-modules-dtu/` installs Amplifier from GitHub with
 local checkouts of amplifier-core and provider-anthropic served in their place.
 
 By default each universe has a record under `~/.digital-twin-universe/universes/<id>/`.
@@ -141,32 +143,40 @@ write from the examples, `validate-profile` and `launch` are enough.
 
 ```bash
 # as a CLI
-uv tool install "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv tool install "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 
 # as a library, from another project
-uv add "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv add "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 
 # once, without installing
-uvx --from "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe" digital-twin-universe --help
+uvx --from "digital-twin-universe[all] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9" digital-twin-universe --help
 ```
 
 `[all]` brings every agent provider the model-backed capabilities run through. Alternatives:
 
 ```bash
 # Only the GitHub Copilot agent provider
-uv tool install "digital-twin-universe[copilot] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv tool install "digital-twin-universe[copilot] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 # Only the Amplifier Agent agent provider
-uv tool install "digital-twin-universe[amplifier-agent] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv tool install "digital-twin-universe[amplifier-agent] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 # Only the Codex agent provider
-uv tool install "digital-twin-universe[codex] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv tool install "digital-twin-universe[codex] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 # Only the Claude agent provider
-uv tool install "digital-twin-universe[claude] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe"
+uv tool install "digital-twin-universe[claude] @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9"
 # Deterministic capabilities only
-uv tool install git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe
+uv tool install git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@v0.6.9
 ```
 
-Verify with `digital-twin-universe manifest`, which needs no credentials. To upgrade, run
-`uv tool upgrade digital-twin-universe`.
+Verify with `digital-twin-universe manifest`, which needs no credentials. Each release is a `v<version>` tag
+and an install stays on its tag, so `uv tool upgrade` does not move it. To upgrade, find the newest release:
+
+```bash
+git ls-remote --tags --refs --sort=-v:refname https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe "v*" | head -1
+```
+
+If it is newer than `digital-twin-universe --version`, run the install command again with that tag and the extras
+`uv tool list --show-extras` reports, or `uv add` again with the new tag for a library. Update the skill with
+`npx skills add microsoft/amplifier-smart-tool-digital-twin-universe#<tag>`.
 
 ## Prerequisites
 
