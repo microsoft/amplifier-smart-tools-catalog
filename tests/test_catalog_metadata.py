@@ -56,6 +56,10 @@ CURRENT_SELECTIONS = {
         "repository": "https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe.git",
         "path": ".",
     },
+    "reality-check": {
+        "repository": "https://github.com/microsoft/amplifier-smart-tool-reality-check.git",
+        "path": ".",
+    },
     "smart-tool-creator": {
         "repository": "https://github.com/microsoft/amplifier-smart-tool-creator.git",
         "path": ".",
