@@ -12,8 +12,6 @@ Before merging a designation, renewal, or replacement, record the selection deci
 
 Keep the metadata field name `reviewed_source` for schema compatibility: it records selected source identity, not proof of conformance or task results. A matching source identity or passing catalog tests establishes source binding and structure, not tool quality.
 
-Digital Twin Universe is selected for Test environments and Smart Tool Creator for Smart Tool development. Both have `recommended: true` at the identities recorded in their `listing.json`. These are selections, not claims of completed conformance review or representative-task evaluation.
-
 ## Evaluation practice
 
 Maintainers may review stability, conformance against the applicable Smart Tool specification, and useful outcomes through representative task scenarios for the selected category. These are suggested evaluation practices, distinct from source binding and not prerequisites to implementing an explicit maintainer selection. Record actual checks separately only when run; do not add duplicate evidence fields to `listing.json`. For checks that are run, record:

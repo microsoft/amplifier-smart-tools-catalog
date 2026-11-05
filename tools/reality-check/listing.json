@@ -1,3 +1,8 @@
 {
-  "category": "builder-tools"
+  "category": "builder-tools",
+  "recommended": true,
+  "reviewed_source": {
+    "repository": "https://github.com/microsoft/amplifier-smart-tool-reality-check.git",
+    "path": "."
+  }
 }
