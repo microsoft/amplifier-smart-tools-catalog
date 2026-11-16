@@ -4,7 +4,7 @@ This repository's promotional page uses the Amplifier Smart Tools family theme.
 Product page content lives in `site.json`. The canonical theme is maintained in
 `microsoft/amplifier-smart-tools/site/theme`; this repository carries a versioned
 copy so a build does not depend on a moving remote theme or an online service.
-Theme version: 0.1.0. Theme code is MIT licensed.
+Theme version: 0.2.0. Theme code is MIT licensed.
 
 ## Build and preview
 
@@ -40,9 +40,8 @@ Use the full family name, Amplifier Smart Tools, as one masthead and footer
 identity. The overview explains the format and how to build a tool; discovery
 and individual tool listings belong in the catalog.
 
-Use plain punctuation, with middle dots permitted between Math, AI, Design, and
-Engineering in the team name. Keep MADE and Microsoft Office of the CTO as text
-attribution. Do not link to the internal team site. Preserve the shared navigation,
+Use plain punctuation. The footer credit, "Developed by made at Microsoft", is the
+only attribution. Do not link to the internal team site. Preserve the shared navigation,
 layout, typography, paper background, and gold details; a tool may set its own
 accent, content, and image in `site.json`.
 
@@ -56,13 +55,32 @@ target checkout, review the diff, and build again. It updates only `site/theme/`
 Page content stays in the owning repository. The family link registry holds only
 navigation identity; the catalog's tool inventory remains `tools/*/source.json`.
 
-## Motion assets
+## Site text
 
-The shared title mark uses an eight-second looping GIF with a static PNG fallback.
-The overview illustration has a pause control that also pauses its title mark. Reduced-motion
-preferences select the still image by default. Shared media lives in
-`site/theme/assets/` and is included by the theme sync script. The original briefs
-and generation provenance live in `amplifier-smart-tools/site/artwork/`.
+`site/theme/text.yaml` holds the wording of the catalog page and the tool pages. It is
+part of the shared theme, so change it in the canonical theme and sync it here. A tool's
+name, description, and use cases come from its own manifest, and category names come from
+`categories.json`.
+
+## Graphics and fonts
+
+`site/theme/graphics.py` draws the family mark, line icons, and one glyph per tool,
+all as inline SVG. A tool's glyph and field color are keyed by its catalog slug; a
+tool without a glyph shows its initial on a neutral field. Reality Check, Smart Tool
+Creator, and Digital Twin Universe have their own artwork: a line drawing with one
+pastel part on an ink tile.
+
+Instrument Sans, Geist Mono, and Pirata One ship in `site/theme/assets/fonts/` with
+their Open Font License texts and are included by the theme sync script.
+
+## Markdown copies and llms.txt
+
+The build follows the [llms.txt](https://llmstxt.org/) proposal so an agent can read the
+catalog without parsing HTML. `llms.txt` at the site root lists every tool by category,
+with the recommended tools first. Each link goes to the tool's Markdown copy at
+`tools/<slug>/index.md`, which holds its description, facts, install prompt, and use
+cases. A tool page names its copy in a `rel="alternate"` link, and every page names
+`llms.txt` in a `rel="describedby"` link.
 
 ## Catalog categories and Recommended
 
@@ -72,21 +90,23 @@ turning categories into a hierarchy. Ordinary listings and tools without classif
 
 Submissions are source-only and category-agnostic: submitters do not add, choose, or create categories or recommendations and need not know category definitions. Maintainers assign classification from the approved registry in separate metadata, never upstream manifests or source pointers. Category additions, label changes, and scope changes require their separate review and approval. A maintainer-owned ordinary listing is `{"category": "approved-id"}`. The required category must be known; optional `recommended` defaults to false in a normalized copy in memory without mutating input or rewriting files. A provided flag must be a strict boolean. True requires the full selected `reviewed_source`; false or omission prohibits it.
 
-Each card shows its “Category: {label}” prefix. Effective recommendations use a plain, noninteractive “Recommended” badge; designations needing review retain the separate “Recommendation needs review” badge. Ordinary listings have no recommendation-status badge. Cards without listings show “Category: Other.” Other is a built-in fallback grouping, not a registry category. Tools without classification automatically appear there and remain searchable by Name and Category. They remain readable without snapshots or JavaScript.
+Each tool's catalog page shows its category as a fact. Effective recommendations carry a "Recommended" label in the All tools list and a "Recommended" label on the tool's page; designations needing review show "Recommendation needs review" in both places. Ordinary listings have no recommendation mark. Tools without listings show the category Other. Other is a built-in fallback grouping, not a registry category. Tools without classification automatically appear there and remain searchable by Name and Category. They remain readable without snapshots or JavaScript.
 
 See the root [category table](../README.md#categories-and-recommendations) for coverage; category scopes remain in `categories.json`. Missing classification is valid for source-pointer contributions.
 
 Explain “Recommended” as a maintainer-curated preference for a category, bound to a selected source repository and distribution path, under the [maintainer guide](../docs/maintainers.md). It is not certification, guaranteed outcomes, or proof of local readiness. Catalog metadata tests do not establish tool quality or completed evaluation.
 
-Keep Recommended separate from All tools. Render each effective recommendation once in the Recommended region as a shortcut and once in All tools; its category label remains on both cards, but the featured shortcut uses the section heading instead of a redundant “Recommended” badge. All tools includes every unique listing, so each effective recommendation renders two card instances. Hide the entire Recommended region when its effective matching count is zero, including on the initial no-JavaScript page when no designation is effective. Do not render a Recommended empty-state message, recommendation-specific details disclosure, or explanation link. The badge is static text, not a control. Existing optional “Full description and source” details retain source provenance and refresh information.
+Keep Recommended separate from All tools. Render each effective recommendation once as a card in Recommended and once as a row in All tools. All tools includes every unique listing. Omit the Recommended section when no designation is effective, and hide it while a search or category is active. Do not render a Recommended empty-state message or explanation link. The marks are static, not controls.
 
-Show the recorded revision and refresh time from snapshot provenance. Retain the `reviewed_source` field name for schema compatibility: it records selected source identity, not proof of conformance or task results. Repository or distribution path drift removes recommendation preference without removing the category or listing. The stale designation still occupies its category's slot.
+Retain the `reviewed_source` field name for schema compatibility: it records selected source identity, not proof of conformance or task results. Repository or distribution path drift removes recommendation preference without removing the category or listing. The stale designation still occupies its category's slot.
 
-Render each effective recommendation shortcut in Recommended before All tools, and also include its listing in the complete All tools list. Group all unique listings, including the recommendations, into their populated categories; do not create empty category groups. Keep every card's category label. Search matches displayed tool names and category labels.
+Render Recommended before All tools. List all unique listings in All tools in name order. Each row shows the icon, name, first sentence of the manifest description, and Get. Search matches tool names, descriptions, use cases, platforms, and category labels.
 
-Use one control bar above all results: Search, Category, Platform, Sort by (Category or Name), and one Clear filters action. Search, category, and platform filter both copies; sorting changes All tools only. Do not display category scope text or insert it on selection; keep scope metadata in the registry. Include the Other option and group only when an entry lacks classification. At phone widths, Search spans a row, Category and Platform share a two-column row, and Sort by and Clear filters share the next row. Keep the native selects at a stable height and min-width 0; keep Clear filters at least 44px tall. The `tool-sort` select defaults to Category. Name places all unique listings in one globally alphabetical list; Category restores their category groups. Recommended remains separate in either mode, and clearing filters preserves the selected sort.
+Put Search and one row of category chips above all results. Show a chip only for a category that holds a tool, and the Other chip only when an entry lacks classification. Do not display category scope text; keep scope metadata in the registry. At phone widths the chips scroll sideways in one row. When nothing matches, show one empty message with a Clear search action.
 
-All filter controls remain hidden without JavaScript so all unique listings stay visible in All tools, alongside the featured shortcuts. The global and All tools counts report unique listings, not rendered card instances. The category headings are noninteractive and there is no separate category-navigation panel.
+Search and chips remain hidden without JavaScript so all unique listings stay visible in All tools, alongside the Recommended cards. A status for screen readers reports the number of matching unique listings.
+
+Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`: icon, name, one line of facts, first sentence, an install prompt for an agent, up to six use cases, and other tools in the same category.
 
 Keep review evidence free of credentials and private details. Preserve public
 source URLs and exact generated manifests. Implement shared rendering and

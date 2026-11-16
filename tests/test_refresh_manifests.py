@@ -200,24 +200,38 @@ This repository does not make a response-time commitment.""",
             "maintainer-curated preference",
             "selected source repository and distribution path",
             "not certification, guaranteed outcomes, or proof of local readiness",
+            'Effective recommendations carry a "Recommended" label in the All tools list',
             "Keep Recommended separate from All tools",
             "all unique listings stay visible in All tools",
-            "All tools counts report unique listings, not rendered card instances",
-            "Hide the entire Recommended region when its effective matching count is zero",
-            "Do not render a Recommended empty-state message, recommendation-specific details disclosure, or explanation link",
-            "one control bar above all results",
-            "Search, category, and platform filter both copies",
-            "sorting changes All tools only",
-            "clearing filters preserves the selected sort",
-            "Do not display category scope text or insert it on selection",
+            "A status for screen readers reports the number of matching unique listings",
+            "Omit the Recommended section when no designation is effective, and hide it while a search or category is active",
+            "Do not render a Recommended empty-state message or explanation link",
+            "Put Search and one row of category chips above all results",
+            "Show a chip only for a category that holds a tool, and the Other chip only when an entry lacks classification",
+            "List all unique listings in All tools in name order",
+            "show one empty message with a Clear search action",
+            "Do not display category scope text",
+            (
+                "Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`: icon, name, "
+                "one line of facts, first sentence, an install prompt for an agent, up to six use cases, "
+                "and other tools in the same category."
+            ),
         ):
             self.assertIn(phrase, site)
 
         readme = re.sub(r"\s+", " ", (catalog_root / "README.md").read_text())
-        self.assertIn("One control bar sits above all results", readme)
         self.assertIn(
-            "Without JavaScript, the control bar and Name list stay hidden, all "
-            "unique listings remain visible in All tools alongside the featured shortcuts",
+            'also appears as a row in the complete All tools list, marked with a "Recommended" label.',
+            readme,
+        )
+        self.assertIn("Search and category chips sit above all results", readme)
+        self.assertIn(
+            "Without JavaScript, search and chips stay hidden and all unique listings remain visible",
+            readme,
+        )
+        self.assertIn(
+            "Each listing opens its own page with its category, platforms, publisher, version, "
+            "an install prompt, and use cases.",
             readme,
         )
 

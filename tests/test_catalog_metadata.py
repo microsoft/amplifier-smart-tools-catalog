@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import copy
-import html
 import importlib.util
 import io
 import json
+import re
 import sys
 import tempfile
 import unittest
 from collections import Counter
+from collections.abc import Iterator
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+from typing import Any
 from unittest.mock import patch
+from urllib.parse import quote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,10 +69,41 @@ CURRENT_SELECTIONS = {
         "path": ".",
     },
 }
+SITE = json.loads((ROOT / "site" / "site.json").read_text(encoding="utf-8"))
+ARGS = SimpleNamespace(local=False, family_owner="microsoft")
+CATALOG_URL = "https://microsoft.github.io/amplifier-smart-tools-catalog/"
+VOID_TAGS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr",
+})
+UNCLASSIFIED = "__unclassified__"
+NO_SNAPSHOT = "No manifest snapshot is available yet."
+ALL_CHIP = ("", "All", "true")
+OTHER_CHIP = (UNCLASSIFIED, "Other", "false")
+CATEGORY_CHIP = (CATEGORY["id"], CATEGORY["label"], "false")
+# Labels a row carries beyond its name and sentence, as (element holding it, class, text).
+MARKS = {
+    "recommended": [("app-row-name", "tag", "Recommended")],
+    "needs-review": [("div", "tag", "Recommendation needs review")],
+    "ordinary": [],
+}
+PILLS = {
+    "recommended": ["Recommended"],
+    "needs-review": ["Recommendation needs review"],
+    "ordinary": [],
+}
 
 
 def tool_count(count: int) -> str:
     return f"{count} tool" if count == 1 else f"{count} tools"
+
+
+def get_started(source_url: str) -> str:
+    """All the text of a tool page's get-started section: its heading, hint, and one prompt."""
+    return (
+        "Get started. Your agent installs the tool and reads its help. "
+        f"Ask your agent. Prompt Copy Go to {source_url} and install it."
+    )
 
 
 def write_json(path: Path, value: object) -> None:
@@ -76,76 +111,320 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value) + "\n", encoding="utf-8")
 
 
-class CatalogCards(HTMLParser):
-    """Observe rendered card order, classification, and badges, not source code."""
+class Element:
+    """One rendered element with its attributes, children, and place in the page."""
 
-    def __init__(self, document: str) -> None:
+    def __init__(self, tag: str, attrs: dict[str, str | None], parent: Element | None = None) -> None:
+        self.tag = tag
+        self.attrs = attrs
+        self.parent = parent
+        self.children: list[Element | str] = []
+
+    @property
+    def classes(self) -> list[str]:
+        return (self.attrs.get("class") or "").split()
+
+    @property
+    def text(self) -> str:
+        # A tool without its own glyph draws a letter inside svg; that is art, not copy.
+        parts = [
+            child if isinstance(child, str) else child.text
+            for child in self.children
+            if isinstance(child, str) or child.tag != "svg"
+        ]
+        return " ".join(" ".join(parts).split())
+
+    def ancestors(self) -> Iterator[Element]:
+        element = self.parent
+        while element is not None and element.tag:
+            yield element
+            element = element.parent
+
+    def descendants(self) -> Iterator[Element]:
+        for child in self.children:
+            if isinstance(child, Element):
+                yield child
+                yield from child.descendants()
+
+    def select(self, tag: str, class_name: str = "", identity: str = "") -> list[Element]:
+        return [
+            element
+            for element in self.descendants()
+            if element.tag == tag
+            and (not class_name or class_name in element.classes)
+            and (not identity or element.attrs.get("id") == identity)
+        ]
+
+    def one(self, tag: str, class_name: str = "", identity: str = "") -> Element:
+        found = self.select(tag, class_name, identity)
+        assert len(found) == 1, f"Expected one <{tag}> ({class_name or identity}), found {len(found)}"
+        return found[0]
+
+    def identities(self) -> Counter[str]:
+        return Counter(
+            element.attrs["id"] for element in self.descendants() if element.attrs.get("id")
+        )
+
+
+class PageParser(HTMLParser):
+    """Build the element tree of rendered markup, not of source code."""
+
+    def __init__(self) -> None:
         super().__init__()
-        self.cards: list[dict[str, object]] = []
-        self.card: dict[str, object] | None = None
-        self.checkboxes: list[dict[str, str | None]] = []
-        self.labels: dict[str, str] = {}
-        self.label_target: str | None = None
-        self.elements: list[tuple[str, dict[str, str | None]]] = []
-        self.card_ancestors: dict[str, list[list[tuple[str, dict[str, str | None]]]]] = {}
-        self.feed(document)
+        self.root = Element("", {})
+        self.current = self.root
 
     def handle_starttag(self, tag: str, attributes: list[tuple[str, str | None]]) -> None:
-        attrs = dict(attributes)
-        if tag not in ("area", "base", "br", "col", "embed", "hr", "img", "input",
-                       "link", "meta", "param", "source", "track", "wbr"):
-            self.elements.append((tag, attrs))
-        if tag == "input" and attrs.get("type") == "checkbox":
-            self.checkboxes.append(attrs)
-        if tag == "label":
-            self.label_target = attrs.get("for")
-            if self.label_target:
-                self.labels[self.label_target] = ""
-        if tag == "article" and attrs.get("class") == "catalog-card":
-            self.card = {
-                "slug": attrs["data-tool"],
-                "category": attrs.get("data-category"),
-                "recommended": attrs.get("data-recommended"),
-                "badges": [],
-                "ids": [],
-                "text": "",
-                "ancestors": list(self.elements[:-1]),
-            }
-            self.cards.append(self.card)
-            self.card_ancestors.setdefault(attrs["data-tool"], []).append(
-                list(self.elements[:-1])
-            )
-        elif self.card is not None:
-            if attrs.get("id"):
-                self.card["ids"].append(attrs["id"])
-            if tag in ("span", "summary"):
-                classes = (attrs.get("class") or "").split()
-                if "recommendation" in classes:
-                    self.card["badges"].append(classes)
+        element = Element(tag, dict(attributes), self.current)
+        self.current.children.append(element)
+        if tag not in VOID_TAGS:
+            self.current = element
+
+    def handle_startendtag(self, tag: str, attributes: list[tuple[str, str | None]]) -> None:
+        self.current.children.append(Element(tag, dict(attributes), self.current))
 
     def handle_endtag(self, tag: str) -> None:
-        for index in range(len(self.elements) - 1, -1, -1):
-            if self.elements[index][0] == tag:
-                del self.elements[index:]
-                break
-        if tag == "article":
-            self.card = None
-        if tag == "label":
-            self.label_target = None
+        element = self.current
+        while element.parent is not None and element.tag != tag:
+            element = element.parent
+        if element.parent is not None:
+            self.current = element.parent
 
     def handle_data(self, data: str) -> None:
-        if self.card is not None:
-            self.card["text"] += data
-        if self.label_target:
-            self.labels[self.label_target] += data
+        self.current.children.append(data)
 
 
-def rendered_catalog(root: Path) -> str:
+def parse(document: str) -> Element:
+    parser = PageParser()
+    parser.feed(document)
+    parser.close()
+    return parser.root
+
+
+@dataclass(frozen=True)
+class Listed:
+    """What one catalog row or featured card tells a reader about a tool."""
+
+    slug: str
+    category: str
+    search: str
+    name: str
+    tagline: str
+    links: list[str]
+    get_label: str | None
+    marks: list[tuple[str, str | None, str]]
+    text: str
+
+
+def named(element: Element) -> str:
+    """Name an element by its class, or by its tag when it has no class."""
+    return element.attrs.get("class") or element.tag
+
+
+def listed(article: Element) -> Listed:
+    title = article.one("h3").one("a")
+    get = article.one("a", "get")
+    return Listed(
+        slug=article.attrs["data-tool"] or "",
+        category=article.attrs.get("data-category") or "",
+        search=article.attrs.get("data-search") or "",
+        name=title.text,
+        tagline=article.one("p").text,
+        links=[title.attrs["href"] or "", get.attrs["href"] or ""],
+        get_label=get.attrs.get("aria-label"),
+        marks=[
+            (named(span.parent or article), span.attrs.get("class"), span.text)
+            for span in article.select("span")
+            if "app-icon" not in span.classes
+        ],
+        text=article.text,
+    )
+
+
+class CatalogPage:
+    """Read the rendered catalog index: category chips, featured cards, rows, and count."""
+
+    def __init__(self, document: str) -> None:
+        self.root = parse(document)
+        self.chips = [
+            (chip.attrs["data-category"], chip.text, chip.attrs["aria-pressed"])
+            for group in self.root.select("div", identity="category-chips")
+            for chip in group.select("button", "chip")
+        ]
+        self.featured = [
+            listed(card)
+            for section in self.root.select("section", identity="featured")
+            for card in section.select("article", "tool-card")
+        ]
+        self.rows = [
+            listed(row) for row in self.root.one("div", "app-list").select("article", "app-row")
+        ]
+        self.count = self.root.one("span", identity="result-count").text
+
+
+def parts(element: Element) -> list[str]:
+    """Name each child element by its class, or by its tag when it has no class."""
+    return [named(child) for child in element.children if isinstance(child, Element)]
+
+
+def section_name(section: Element) -> str:
+    headings = section.select("h2")
+    return section.attrs.get("id") or (headings[0].text if headings else " ".join(section.classes))
+
+
+class ToolPage:
+    """Read a tool's own page: layout, status, facts, use cases, prompt, and every link."""
+
+    def __init__(self, document: str) -> None:
+        self.document = document
+        self.root = parse(document)
+        main = self.root.one("main")
+        head = main.one("section", "store-head")
+        started = main.one("section", identity="get-started")
+        self.title = self.root.one("title").text
+        self.text = self.root.one("body").text
+        self.links = [link.attrs.get("href") or "" for link in self.root.select("a")]
+        self.layout = [
+            section_name(child) for child in main.children if isinstance(child, Element)
+        ]
+        self.header = parts(head.one("h1").parent or head)
+        self.assets = [link.attrs["href"] for link in self.root.select("link")]
+        self.assets += [script.attrs["src"] for script in self.root.select("script")]
+        self.pills = [pill.text for pill in head.select("p", "status-pill")]
+        self.name = head.one("h1").text
+        self.tagline = head.one("p", "standfirst").text
+        self.actions = {
+            action.text: action.attrs["href"] for action in head.one("div", "actions").select("a")
+        }
+        self.facts = {
+            fact.one("dt").text: fact.one("dd").text
+            for fact in self.root.one("dl").select("div")
+        }
+        self.sections = {
+            heading.text: section.text
+            for section in main.select("section")
+            for heading in section.select("h2")
+        }
+        self.use_cases = [
+            case.text for cases in main.select("ul", "use-cases") for case in cases.select("li")
+        ]
+        self.prompt = started.one("pre", identity="prompt").text
+        self.more = [listed(row) for row in main.select("article", "app-row")]
+
+
+class MarkdownPage:
+    """Read a tool's Markdown copy: name, description, facts, prompt, and use cases."""
+
+    def __init__(self, document: str) -> None:
+        assert document.endswith("\n") and not document.endswith("\n\n"), "Expected one final newline"
+        blocks = document.removesuffix("\n").split("\n\n")
+        self.layout = [block for block in blocks if block.startswith("#")]
+        self.name = blocks[0].removeprefix("# ")
+        self.description = blocks[1]
+        self.facts = {
+            term: value
+            for term, _, value in (line.removeprefix("- ").partition(": ") for line in blocks[2].splitlines())
+        }
+        assert blocks[3:5] == ["## Get started", "Give this prompt to your agent:"], blocks[3:5]
+        self.prompt = blocks[5].removeprefix("> ")
+        self.use_cases = [line.removeprefix("- ") for block in blocks[7:] for line in block.splitlines()]
+
+
+def llms_sections(document: str) -> dict[str, list[tuple[str, str, str]]]:
+    """Check the llms.txt layout and return the (name, URL, notes) of each item by H2 title."""
+    lines = document.splitlines()
+    assert re.fullmatch(r"# \S.*", lines[0]) and re.fullmatch(r"> \S.*", lines[2]), lines[:3]
+    assert lines[1] == lines[3] == "", lines[:4]
+    assert document.endswith("\n") and not document.endswith("\n\n"), "Expected one final newline"
+    sections: dict[str, list[tuple[str, str, str]]] = {}
+    items: list[tuple[str, str, str]] | None = None
+    for line in lines[1:]:
+        if line.startswith("#"):
+            assert re.fullmatch(r"## \S.*", line) and line[3:] not in sections, line
+            items = sections[line[3:]] = []
+        elif line and items is not None:
+            item = re.fullmatch(r"- \[([^\]]+)\]\((\S+)\)(?:: (\S.*))?", line)
+            assert item, line
+            items.append((item[1], item[2], item[3] or ""))
+    return sections
+
+
+@dataclass(frozen=True)
+class Recorded:
+    """What a tool's recorded files say its row and page show, and the snapshot source they omit."""
+
+    name: str
+    state: str
+    category: str
+    label: str
+    tagline: str
+    use_cases: list[str]
+    source_url: str
+    publisher: str
+    version: str | None
+    provenance: dict[str, Any]
+
+
+def load_renderer() -> ModuleType:
     spec = importlib.util.spec_from_file_location("catalog_theme_build", ROOT / "site" / "theme" / "build.py")
     assert spec and spec.loader
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
-    return renderer.catalog({}, SimpleNamespace(local=False, family_owner="microsoft"), root)
+    return renderer
+
+
+def rendered_catalog(root: Path) -> str:
+    return load_renderer().catalog({}, ARGS, root)
+
+
+def rendered_tool_pages(root: Path) -> dict[str, str]:
+    """Build the per-tool pages and return every written file by its output path."""
+    with tempfile.TemporaryDirectory() as temporary:
+        out = Path(temporary)
+        load_renderer().build_listings(root, out, ARGS, SITE)
+        return {
+            path.relative_to(out).as_posix(): path.read_text(encoding="utf-8")
+            for path in out.rglob("*")
+            if path.is_file()
+        }
+
+
+def tool_page(root: Path, slug: str) -> ToolPage:
+    return ToolPage(rendered_tool_pages(root)[f"tools/{slug}/index.html"])
+
+
+def recorded_tools(root: Path) -> dict[str, Recorded]:
+    """Derive each tool's expected display from its files and the shared identity helper."""
+    renderer = load_renderer()
+
+    def shown(value: str) -> str:
+        return " ".join(renderer.plain(value).split())
+
+    categories, listings = load_catalog_metadata(root)
+    tools = {}
+    for source in catalog_sources(root):
+        slug = source.parent.name
+        pointer = validate_pointer(read_json(source, root))
+        manifest, provenance = read_snapshot(source.parent, root)
+        listing = listings.get(slug)
+        repository = pointer["repository"].removesuffix(".git")
+        source_url = repository
+        if pointer["path"] != ".":
+            source_url = f"{repository}/tree/{quote(pointer['ref'], safe='/')}/{quote(pointer['path'], safe='/')}"
+        owner = urlsplit(repository).path.strip("/").split("/")[0]
+        tools[slug] = Recorded(
+            name=slug.replace("-", " ").title(),
+            state=recommendation_state(pointer, provenance, listing, bool(manifest)),
+            category=listing["category"] if listing else UNCLASSIFIED,
+            label=categories[listing["category"]]["label"] if listing else "Other",
+            tagline=shown(renderer.first_sentence(manifest["description"])) if manifest else NO_SNAPSHOT,
+            use_cases=[shown(case) for case in manifest.get("use_cases", [])],
+            source_url=source_url,
+            publisher="Microsoft" if owner == "microsoft" else owner,
+            version=f"v{manifest['version']}" if manifest.get("version") else None,
+            provenance=provenance,
+        )
+    return tools
 
 
 class CatalogMetadataTests(unittest.TestCase):
@@ -174,6 +453,17 @@ class CatalogMetadataTests(unittest.TestCase):
         if listing is not None:
             write_json(entry / "listing.json", listing)
         return entry
+
+    def assert_omits_snapshot_source(self, page: ToolPage, provenance: dict[str, Any]) -> None:
+        """The snapshot's commit, refresh date, and manifest stay out of a tool's page."""
+        self.assertNotIn("Manifest snapshot", page.text)
+        self.assertNotIn("Read manifest", page.text)
+        self.assertEqual([href for href in page.links if "/blob/" in href], [])
+        if provenance:
+            self.assertNotIn(provenance["source"]["commit"][:7], page.document)
+            self.assertNotIn(provenance["last_success"][:10], page.document)
+            manifest = quote(provenance["original_manifest_path"], safe="/")
+            self.assertEqual([href for href in page.links if href.endswith(manifest)], [])
 
     def test_valid_recommendation_and_classified_alternative(self) -> None:
         self.add_entry("alternative", {"category": CATEGORY["id"], "recommended": False})
@@ -205,6 +495,20 @@ class CatalogMetadataTests(unittest.TestCase):
         (self.root / "tools" / "tool" / "listing.json").unlink()
         self.assertEqual(load_catalog_metadata(self.root), (None, {}))
 
+    def test_catalog_without_registry_renders_rows_without_chips(self) -> None:
+        (self.root / "categories.json").unlink()
+        (self.root / "tools" / "tool" / "listing.json").unlink()
+        catalog = CatalogPage(rendered_catalog(self.root))
+        self.assertEqual(catalog.root.select("div", identity="category-chips"), [])
+        self.assertEqual(catalog.root.select("section", identity="featured"), [])
+        self.assertEqual([row.slug for row in catalog.rows], ["tool"])
+        self.assertEqual(catalog.rows[0].marks, [])
+        self.assertEqual(catalog.rows[0].search, "tool tool a fixture tool. testing linux")
+        self.assertEqual(catalog.count, "1 tool")
+        page = tool_page(self.root, "tool")
+        self.assertEqual(page.pills, [])
+        self.assertEqual(page.facts, {"Platform": "Linux", "Publisher": "example.test"})
+
     def test_registry_with_unclassified_listing_is_valid(self) -> None:
         self.add_entry("unclassified", None)
         categories, listings = load_catalog_metadata(self.root)
@@ -224,27 +528,82 @@ class CatalogMetadataTests(unittest.TestCase):
         (pending / "SMART_TOOL.md").unlink()
         (pending / "provenance.json").unlink()
         before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
-        document = rendered_catalog(self.root)
-        cards = CatalogCards(document).cards
-        self.assertEqual({card["slug"] for card in cards}, {"tool", "pending-snapshot"})
-        self.assertEqual(len(cards), 2)
-        for card in cards:
-            self.assertIn("Category: Other", card["text"])
-            self.assertEqual(card["category"], "")
-            self.assertEqual(card["recommended"], "false")
-            self.assertEqual(card["badges"], [])
-            self.assertTrue(any(
-                attrs.get("id") == "category-group-unclassified" and "hidden" not in attrs
-                for tag, attrs in card["ancestors"] if tag == "section"
-            ))
-        self.assertIn('<option value="__unclassified__">Other</option>', document)
-        self.assertIn('<h3 id="category-heading-unclassified"><span>Other</span>', document)
-        self.assertIn('id="category-group-count-unclassified">2 tools</span>', document)
-        self.assertIn('id="result-count" role="status">2 tools</p>', document)
-        self.assertIn('id="recommended-region" aria-labelledby="recommended-heading" hidden>', document)
-        self.assertNotIn("Not yet classified", document)
-        self.assertIn("No manifest snapshot is available yet.", document)
-        self.assertIn("pending snapshot", document)
+        catalog = CatalogPage(rendered_catalog(self.root))
+        pages = rendered_tool_pages(self.root)
+        self.assertEqual([row.slug for row in catalog.rows], ["pending-snapshot", "tool"])
+        for row in catalog.rows:
+            self.assertEqual(row.category, UNCLASSIFIED)
+            self.assertEqual(row.marks, [])
+            self.assertEqual(row.links, [f"./tools/{row.slug}/"] * 2)
+        pending_row, tool_row = catalog.rows
+        self.assertEqual(pending_row.text, f"Pending Snapshot {NO_SNAPSHOT} Get")
+        self.assertEqual(
+            pending_row.search,
+            "pending-snapshot pending snapshot no manifest snapshot is available yet. "
+            "inspect the source repository for current guidance. other",
+        )
+        self.assertEqual(tool_row.text, "Tool A fixture tool. Get")
+        self.assertEqual(tool_row.search, "tool tool a fixture tool. testing linux other")
+        self.assertEqual(catalog.chips, [ALL_CHIP, OTHER_CHIP])
+        self.assertEqual(catalog.count, "2 tools")
+        self.assertEqual(catalog.featured, [])
+        self.assertEqual(catalog.root.select("section", identity="featured"), [])
+        self.assertEqual(
+            set(pages),
+            {
+                "tools/pending-snapshot/index.html",
+                "tools/pending-snapshot/index.md",
+                "tools/tool/index.html",
+                "tools/tool/index.md",
+            },
+        )
+        self.assertEqual(
+            pages["tools/pending-snapshot/index.md"],
+            f"# Pending Snapshot\n\n{NO_SNAPSHOT} Inspect the source repository for current guidance.\n\n"
+            "- Category: Other\n- Publisher: example.test\n- Source: https://example.test/tool\n\n"
+            "## Get started\n\nGive this prompt to your agent:\n\n"
+            "> Go to https://example.test/tool and install it.\n",
+        )
+        self.assertEqual(
+            pages["tools/tool/index.md"],
+            "# Tool\n\nA fixture tool.\n\n"
+            "- Category: Other\n- Platforms: Linux\n- Publisher: example.test\n"
+            "- Source: https://example.test/tool\n\n"
+            "## Get started\n\nGive this prompt to your agent:\n\n"
+            "> Go to https://example.test/tool and install it.\n\n"
+            "## Use it to\n\n- testing\n",
+        )
+        pending_page = ToolPage(pages["tools/pending-snapshot/index.html"])
+        self.assertEqual(pending_page.pills, [])
+        self.assertEqual(pending_page.tagline, NO_SNAPSHOT)
+        self.assertEqual(
+            pending_page.facts,
+            {"Category": "Other", "Platform": "Not declared", "Publisher": "example.test"},
+        )
+        self.assertEqual(pending_page.prompt, "Go to https://example.test/tool and install it.")
+        self.assertEqual(
+            pending_page.sections,
+            {
+                "Get started.": get_started("https://example.test/tool"),
+                "What it does.": "What it does. Inspect the source repository for current guidance.",
+            },
+        )
+        self.assertEqual(pending_page.text.count(NO_SNAPSHOT), 1)
+        self.assert_omits_snapshot_source(pending_page, {})
+        snapshot_page = ToolPage(pages["tools/tool/index.html"])
+        self.assertEqual(snapshot_page.pills, [])
+        self.assertEqual(
+            snapshot_page.facts,
+            {"Category": "Other", "Platform": "Linux", "Publisher": "example.test"},
+        )
+        self.assertEqual(
+            snapshot_page.sections,
+            {"Get started.": get_started("https://example.test/tool"), "Use it to.": "Use it to. testing"},
+        )
+        self.assertNotIn(NO_SNAPSHOT, snapshot_page.text)
+        self.assert_omits_snapshot_source(
+            snapshot_page, read_json(self.root / "tools" / "tool" / "provenance.json", self.root)
+        )
         self.assertEqual(load_catalog_metadata(self.root), ({CATEGORY["id"]: CATEGORY}, {}))
         for path, raw in before.items():
             self.assertEqual(path.read_bytes(), raw)
@@ -570,104 +929,354 @@ class CatalogMetadataTests(unittest.TestCase):
 
     def test_recommendation_drift_removes_rendered_badge_and_preference(self) -> None:
         self.add_entry("a-ordinary", None)
-        before = rendered_catalog(self.root)
-        cards = CatalogCards(before).cards
-        self.assertEqual([card["slug"] for card in cards], ["tool", "tool", "a-ordinary"])
-        self.assertEqual(cards[0]["badges"], [])
-        self.assertEqual(cards[1]["badges"], [["recommendation", "recommended"]])
+        before = CatalogPage(rendered_catalog(self.root))
+        self.assertEqual([row.slug for row in before.rows], ["a-ordinary", "tool"])
+        self.assertEqual([card.slug for card in before.featured], ["tool"])
+        self.assertEqual(before.rows[0].marks, [])
+        self.assertEqual(before.rows[1].marks, MARKS["recommended"])
+        self.assertEqual(before.featured[0].marks, [])
+        self.assertEqual(tool_page(self.root, "tool").pills, ["Recommended"])
         listing_path = self.root / "tools" / "tool" / "listing.json"
         original = listing_path.read_bytes()
         provenance_path = self.root / "tools" / "tool" / "provenance.json"
         provenance = read_json(provenance_path, self.root)
         provenance["source"]["commit"] = "b" * 40
         write_json(provenance_path, provenance)
-        advanced = CatalogCards(rendered_catalog(self.root)).cards
-        self.assertEqual(advanced[1]["badges"], [["recommendation", "recommended"]])
+        advanced = CatalogPage(rendered_catalog(self.root))
+        self.assertEqual([card.slug for card in advanced.featured], ["tool"])
+        self.assertEqual(advanced.rows[1].marks, MARKS["recommended"])
+        advanced_page = tool_page(self.root, "tool")
+        self.assertEqual(advanced_page.pills, ["Recommended"])
+        self.assertEqual(advanced_page.sections["Get started."], get_started("https://example.test/tool"))
+        self.assert_omits_snapshot_source(advanced_page, provenance)
         # The distribution path moved away from the reviewed source.
         pointer_path = self.root / "tools" / "tool" / "source.json"
         write_json(pointer_path, {"repository": IDENTITY["repository"], "path": "another"})
         provenance["source"]["path"] = "another"
         write_json(provenance_path, provenance)
-        after = rendered_catalog(self.root)
-        cards = CatalogCards(after).cards
-        by_slug = {card["slug"]: card for card in cards}
-        self.assertEqual(set(by_slug), {"a-ordinary", "tool"})
-        self.assertEqual(by_slug["tool"]["category"], CATEGORY["id"])
-        self.assertEqual(by_slug["tool"]["badges"], [["recommendation", "needs-review"]])
-        self.assertIn("Category: Test environments", by_slug["tool"]["text"])
-        self.assertIn("Recommendation needs review", by_slug["tool"]["text"])
-        self.assertIn("Category: Other", by_slug["a-ordinary"]["text"])
-        self.assertNotIn("Not currently recommended", after)
-        self.assertNotIn('class="recommendation recommended"', after)
-        self.assertIn("Recommendation needs review", after)
-        self.assertNotIn("No recommendation preference applies.", after)
+        after = CatalogPage(rendered_catalog(self.root))
+        self.assertEqual([row.slug for row in after.rows], ["a-ordinary", "tool"])
+        ordinary, drifted = after.rows
+        self.assertEqual(drifted.category, CATEGORY["id"])
+        self.assertEqual(drifted.marks, MARKS["needs-review"])
+        self.assertEqual(drifted.text, "Tool A fixture tool. Recommendation needs review Get")
+        review = after.root.one("span", "tag")
+        self.assertEqual(review.attrs, {"class": "tag"})
+        self.assertEqual(parts(review.parent or after.root), ["app-row-name", "p", "tag"])
+        self.assertEqual(ordinary.category, UNCLASSIFIED)
+        self.assertEqual(ordinary.marks, [])
+        self.assertEqual(ordinary.text, "A Ordinary A fixture tool. Get")
+        self.assertEqual(after.featured, [])
+        self.assertEqual(after.root.select("section", identity="featured"), [])
+        self.assertEqual(after.chips, [ALL_CHIP, CATEGORY_CHIP, OTHER_CHIP])
+        drifted_page = tool_page(self.root, "tool")
+        self.assertEqual(drifted_page.pills, ["Recommendation needs review"])
+        self.assertEqual(drifted_page.facts["Category"], CATEGORY["label"])
+        self.assertEqual(
+            drifted_page.actions,
+            {"Get": "#get-started", "View on GitHub": "https://example.test/tool/tree/main/another"},
+        )
+        self.assertEqual(
+            drifted_page.prompt, "Go to https://example.test/tool/tree/main/another and install it."
+        )
+        self.assert_omits_snapshot_source(drifted_page, provenance)
         self.assertEqual(listing_path.read_bytes(), original)
 
-    def test_one_shared_filter_bar_precedes_both_result_regions(self) -> None:
+    def test_search_and_category_chips_precede_featured_and_all_tools(self) -> None:
         self.add_entry("ordinary", None)
-        document = rendered_catalog(self.root)
-        filters = document.index('id="catalog-filters"')
-        recommended = document.index('id="recommended-region"')
-        other = document.index('id="other-tools"')
-        self.assertLess(filters, recommended)
-        self.assertLess(filters, other)
-        self.assertLess(recommended, other)
-        self.assertEqual(document.count('id="clear-filters"'), 1)
-        self.assertIn('id="catalog-filters" hidden', document)
-        self.assertIn('<select id="category">', document)
-        self.assertNotIn("category-scope", document)
-        self.assertNotIn("aria-describedby", document)
-        self.assertNotIn("data-scope", document)
-        self.assertIn(
-            'value="__unclassified__">',
-            document,
-        )
-        self.assertIn('<label for="tool-sort">Sort by</label>', document)
-        self.assertIn('id="other-tools-heading">All tools</h2>', document)
-        self.assertNotIn("Other tools", document)
-        self.assertNotIn("Other tool order", document)
-        self.assertNotIn("Not currently recommended", document)
-        self.assertNotIn("No Recommended tools match these filters", document)
-        for removed in ("recommended-only", "show-all-tools", "category-navigation",
-                        "data-category-filter", "recommendation-guide",
-                        "recommendation-disclosure", "What does Recommended mean?"):
-            self.assertNotIn(removed, document)
-        cards = CatalogCards(document).cards
-        self.assertEqual([card["slug"] for card in cards], ["tool", "tool", "ordinary"])
-        self.assertEqual(cards[0]["badges"], [])
-        self.assertEqual(cards[1]["badges"], [["recommendation", "recommended"]])
-        self.assertEqual(cards[2]["badges"], [])
-        self.assertTrue(any(
-            tag == "section" and attrs.get("id") == "recommended-region"
-            for tag, attrs in CatalogCards(document).card_ancestors["tool"][0]
-        ))
-
-    def test_recommended_badge_is_static_and_source_details_remain_optional(self) -> None:
-        document = rendered_catalog(self.root)
-        self.assertIn('<span class="recommendation recommended">Recommended</span>', document)
-        self.assertNotIn('<details class="recommendation-disclosure">', document)
-        self.assertNotIn('<details class="recommendation-guide">', document)
-        self.assertNotIn('href="#recommendation-guide-title"', document)
-        self.assertNotIn("What does Recommended mean?", document)
-        self.assertNotIn("Not currently recommended", document)
-        self.assertIn('<details><summary>Full description and source</summary>', document)
-        self.assertIn(f'Source commit: <code>{COMMIT}</code>', document)
-        self.assertIn("Snapshot refreshed:", document)
-        parsed = CatalogCards(document)
-        self.assertEqual([card["slug"] for card in parsed.cards], ["tool", "tool"])
-        self.assertEqual(parsed.cards[0]["badges"], [])
-        self.assertEqual(parsed.cards[1]["badges"], [["recommendation", "recommended"]])
+        renderer = load_renderer()
+        document = renderer.catalog({}, ARGS, self.root)
+        positions = [
+            document.index(f'id="{identity}"')
+            for identity in ("store-search", "category-chips", "featured", "result-count", "empty-results")
+        ]
+        self.assertEqual(positions, sorted(positions))
+        catalog = CatalogPage(document)
+        root = catalog.root
+        self.assertEqual(root.one("section", "catalog-hero").one("h1").text, "Catalog")
+        # The script reveals its own controls; the tools stay readable without it.
+        hidden = {element.attrs.get("id") for element in root.descendants() if "hidden" in element.attrs}
+        self.assertEqual(hidden, {"store-search", "category-chips", "empty-results"})
+        search = root.one("section", "catalog-hero").one("div", identity="store-search")
+        self.assertEqual(search.one("input", identity="tool-search").attrs["type"], "search")
+        self.assertEqual(root.one("div", identity="category-chips").attrs["role"], "group")
+        self.assertEqual(catalog.chips, [ALL_CHIP, CATEGORY_CHIP, OTHER_CHIP])
+        clear = [element for element in root.descendants() if "data-clear" in element.attrs]
+        self.assertEqual(clear, root.one("div", identity="empty-results").select("button"))
+        self.assertEqual(len(clear), 1)
+        # The count is spoken, not drawn: a status that only screen readers reach.
+        count = root.one("span", identity="result-count")
+        self.assertEqual(count.attrs["role"], "status")
+        self.assertEqual(count.classes, ["visually-hidden"])
+        self.assertEqual(catalog.count, "2 tools")
+        self.assertEqual(parts(count.parent or root), ["h2", "visually-hidden"])
+        self.assertEqual((count.parent or root).text, "All tools 2 tools")
+        browse = root.one("section", "split")
         self.assertEqual(
-            parsed.cards[1]["text"].replace("Recommended", ""),
-            parsed.cards[0]["text"],
+            browse.text,
+            "Let your agent browse. One skill finds the right tool and installs it. "
+            f"Ask your agent. Prompt Copy {renderer.FAMILY_PROMPT}",
         )
-        self.assertTrue(any(
-            tag == "section" and attrs.get("id") == "recommended-region"
-            for tag, attrs in parsed.card_ancestors["tool"][0]
-        ))
-        card = parsed.cards[0]
-        self.assertIn("Category: Test environments", card["text"])
-        self.assertNotIn("Not currently recommended", card["text"])
+        self.assertEqual(parts(browse.one("div", "callout")), ["h3", "copy-region"])
+        self.assertEqual(root.select("p", "note"), [])
+        self.assertNotIn("not the tools themselves", root.text)
+        self.assertNotIn("Listings come from", root.text)
+        self.assertNotIn("Add a tool", [anchor.text for anchor in root.select("a")])
+        self.assertEqual([card.slug for card in catalog.featured], ["tool"])
+        self.assertEqual([row.slug for row in catalog.rows], ["ordinary", "tool"])
+        self.assertEqual(catalog.featured[0].marks, [])
+        self.assertEqual(catalog.rows[0].marks, [])
+        self.assertEqual(catalog.rows[1].marks, MARKS["recommended"])
+        self.assertEqual(
+            [article.attrs["class"] for article in root.select("article")],
+            ["tool-card wide", "app-row", "app-row"],
+        )
+
+    def test_every_element_the_script_looks_up_is_rendered_once(self) -> None:
+        self.add_entry("ordinary", None)
+        script = (ROOT / "site" / "theme" / "site.js").read_text(encoding="utf-8")
+        looked_up = set(re.findall(r"getElementById\('([^']+)'\)", script))
+        self.assertLessEqual(
+            {"tool-search", "store-search", "category-chips", "result-count", "featured", "empty-results"},
+            looked_up,
+        )
+        renderer = load_renderer()
+        page = parse(renderer.document(SITE, renderer.catalog(SITE, ARGS, self.root), ARGS))
+        identities = page.identities()
+        for identity in looked_up:
+            with self.subTest(identity=identity):
+                self.assertEqual(identities[identity], 1)
+        self.assertEqual(set(identities.values()), {1})
+
+    def test_recommended_marker_is_static_and_the_tool_page_omits_snapshot_source(self) -> None:
+        catalog = CatalogPage(rendered_catalog(self.root))
+        self.assertEqual([row.slug for row in catalog.rows], ["tool"])
+        self.assertEqual([card.slug for card in catalog.featured], ["tool"])
+        row, card = catalog.rows[0], catalog.featured[0]
+        self.assertEqual(row.category, CATEGORY["id"])
+        self.assertEqual(row.marks, MARKS["recommended"])
+        self.assertEqual(row.text, "Tool Recommended A fixture tool. Get")
+        self.assertEqual(row.links, ["./tools/tool/"] * 2)
+        self.assertEqual(row.get_label, "Get Tool")
+        self.assertEqual(card.marks, [])
+        self.assertEqual(card.text, "Tool A fixture tool. Get")
+        self.assertEqual(card.links, ["./tools/tool/"] * 2)
+        tag = catalog.root.one("span", "tag")
+        self.assertEqual(tag.attrs, {"class": "tag"})
+        self.assertEqual(tag.children, ["Recommended"])
+        self.assertEqual(parts(tag.parent or catalog.root), ["a", "tag"])
+        self.assertTrue(
+            {"a", "button", "details", "summary"}.isdisjoint(ancestor.tag for ancestor in tag.ancestors())
+        )
+        self.assertEqual(
+            [span.attrs.get("id") for span in catalog.root.select("span", "visually-hidden")],
+            ["result-count"],
+        )
+        page = tool_page(self.root, "tool")
+        self.assertEqual(page.title, "Tool | Amplifier Smart Tools catalog")
+        self.assertEqual(page.pills, ["Recommended"])
+        self.assertEqual(page.name, "Tool")
+        self.assertEqual(page.tagline, "A fixture tool.")
+        self.assertEqual(
+            page.actions, {"Get": "#get-started", "View on GitHub": "https://example.test/tool"}
+        )
+        self.assertEqual(
+            page.facts, {"Category": "Test environments", "Platform": "Linux", "Publisher": "example.test"}
+        )
+        self.assertEqual(page.use_cases, ["testing"])
+        self.assertEqual(page.prompt, "Go to https://example.test/tool and install it.")
+        self.assertEqual(
+            page.sections,
+            {"Get started.": get_started("https://example.test/tool"), "Use it to.": "Use it to. testing"},
+        )
+        self.assert_omits_snapshot_source(
+            page, read_json(self.root / "tools" / "tool" / "provenance.json", self.root)
+        )
+        self.assertEqual(page.more, [])
+
+    def test_tool_page_status_pill_follows_recommendation_state(self) -> None:
+        self.add_entry("ordinary", {"category": CATEGORY["id"]})
+        pages = rendered_tool_pages(self.root)
+        recommended = ToolPage(pages["tools/tool/index.html"])
+        ordinary = ToolPage(pages["tools/ordinary/index.html"])
+        self.assertEqual(recommended.pills, ["Recommended"])
+        self.assertEqual(recommended.header, ["status-pill", "h1", "facts", "standfirst", "actions"])
+        self.assertEqual(ordinary.pills, [])
+        self.assertEqual(ordinary.header, ["h1", "facts", "standfirst", "actions"])
+        # A designation without its snapshot keeps the category slot but not the endorsement.
+        (self.root / "tools" / "tool" / "provenance.json").unlink()
+        review = tool_page(self.root, "tool")
+        self.assertEqual(review.pills, ["Recommendation needs review"])
+        self.assertEqual(review.header, ["status-pill", "h1", "facts", "standfirst", "actions"])
+        self.assertEqual(tool_page(self.root, "ordinary").pills, [])
+
+    def test_tool_page_keeps_facts_in_its_header_and_the_prompt_ahead_of_use_cases(self) -> None:
+        self.add_entry("neighbor", {"category": CATEGORY["id"]})
+        manifest = self.root / "tools" / "tool" / "SMART_TOOL.md"
+        manifest.write_text(
+            "---\nname: Tool\nversion: 1.2.3\ndescription: A fixture tool. It checks things.\n"
+            "platforms: [linux]\nuse_cases: [testing]\n---\n# Tool\n",
+            encoding="utf-8",
+        )
+        page = tool_page(self.root, "tool")
+        self.assertEqual(page.layout, ["store-head", "get-started", "Use it to.", "More tools."])
+        self.assertEqual(page.header, ["status-pill", "h1", "facts", "standfirst", "actions"])
+        self.assertEqual(
+            list(page.facts.items()),
+            [
+                ("Category", "Test environments"),
+                ("Platform", "Linux"),
+                ("Publisher", "example.test"),
+                ("Version", "v1.2.3"),
+            ],
+        )
+        # Each term is read to a screen reader and only its value is drawn.
+        facts = page.root.one("dl")
+        self.assertEqual(facts.classes, ["facts"])
+        self.assertEqual(
+            [
+                [(child.tag, child.classes) for child in fact.children if isinstance(child, Element)]
+                for fact in facts.children
+                if isinstance(fact, Element)
+            ],
+            [[("dt", ["visually-hidden"]), ("dd", [])]] * 4,
+        )
+        self.assertEqual(
+            page.sections,
+            {
+                "Get started.": get_started("https://example.test/tool"),
+                "Use it to.": "Use it to. It checks things. testing",
+                "More tools.": "More tools. Neighbor A fixture tool. Get",
+            },
+        )
+        self.assertEqual([other.slug for other in page.more], ["neighbor"])
+        manifest.write_text(
+            "---\nname: Tool\ndescription: A fixture tool. It checks things.\n"
+            "platforms: [linux]\nuse_cases: []\n---\n# Tool\n",
+            encoding="utf-8",
+        )
+        described = tool_page(self.root, "tool")
+        self.assertEqual(described.layout, ["store-head", "get-started", "What it does.", "More tools."])
+        self.assertEqual(described.sections["What it does."], "What it does. It checks things.")
+        self.assertEqual(described.use_cases, [])
+        self.assertNotIn("Version", described.facts)
+        manifest.write_text(
+            "---\nname: Tool\ndescription: A fixture tool.\nplatforms: [linux]\nuse_cases: []\n---\n# Tool\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(tool_page(self.root, "tool").layout, ["store-head", "get-started", "More tools."])
+
+    def test_page_shell_credits_the_family_once_in_the_footer(self) -> None:
+        renderer = load_renderer()
+        shell = parse(renderer.document(SITE, "", ARGS)).one("body")
+        self.assertEqual(
+            [child.tag for child in shell.children if isinstance(child, Element)],
+            ["a", "svg", "header", "main", "footer", "div"],
+        )
+        footer = shell.one("footer")
+        credit = shell.one("p", "credit")
+        self.assertEqual(
+            footer.text, "Amplifier Smart Tools Catalog Blog Specification GitHub Developed by made at Microsoft"
+        )
+        self.assertIs(footer.one("div", "footer-grid").children[-1], credit)
+        self.assertEqual(credit.text, "Developed by made at Microsoft")
+        self.assertEqual([(child.tag, child.text) for child in credit.descendants()], [("strong", "made")])
+        self.assertNotIn("a", [ancestor.tag for ancestor in credit.ancestors()])
+        for words in ("made", "Microsoft"):
+            with self.subTest(words=words):
+                self.assertEqual(shell.text.count(words), 1)
+        for class_name in ("attribution", "footer-attribution", "team"):
+            with self.subTest(class_name=class_name):
+                self.assertEqual([element for element in shell.descendants() if class_name in element.classes], [])
+        for words in ("Office of the CTO", "Math", "Design", "Engineering"):
+            with self.subTest(words=words):
+                self.assertNotIn(words, shell.text)
+        # A publisher is a fact about one tool; the shell names Microsoft only in its credit.
+        entry = self.add_entry("published", None)
+        repository = "https://github.com/microsoft/example.git"
+        write_json(entry / "source.json", {"repository": repository})
+        provenance = read_json(entry / "provenance.json", self.root)
+        provenance["source"]["repository"] = repository
+        write_json(entry / "provenance.json", provenance)
+        page = tool_page(self.root, "published")
+        self.assertEqual(page.facts["Publisher"], "Microsoft")
+        self.assertEqual(page.root.one("main").text.count("Microsoft"), 1)
+        self.assertEqual(page.text.count("Microsoft"), 2)
+        self.assertEqual(tool_page(self.root, "tool").text.count("Microsoft"), 1)
+
+    def test_page_shell_links_the_same_destinations_in_the_masthead_footer_and_menu(self) -> None:
+        renderer = load_renderer()
+        shell = parse(renderer.document(SITE, "", ARGS)).one("body")
+        destinations = [
+            ("Catalog", "https://microsoft.github.io/amplifier-smart-tools-catalog/"),
+            ("Blog", "https://microsoft.github.io/amplifier-smart-tools/blog/"),
+            ("Specification", renderer.SPEC),
+            ("GitHub", "https://github.com/microsoft/amplifier-smart-tools-catalog"),
+        ]
+        regions = {
+            "masthead": shell.one("header", "masthead").one("nav", "nav"),
+            "footer": shell.one("footer").one("nav", "footer-links"),
+            "menu": shell.one("div", identity="menu").one("ul", "menu-rows"),
+        }
+        for name, region in regions.items():
+            with self.subTest(region=name):
+                self.assertEqual(
+                    [(anchor.text, anchor.attrs["href"]) for anchor in region.select("a")], destinations
+                )
+        # Only the masthead marks the page a reader is on.
+        self.assertEqual(
+            [
+                (anchor.text, anchor.attrs["aria-current"], named(anchor.parent or shell))
+                for anchor in shell.select("a")
+                if "aria-current" in anchor.attrs
+            ],
+            [("Catalog", "page", "nav")],
+        )
+        self.assertNotIn("Build", shell.text)
+
+    def test_rows_show_the_first_sentence_and_search_covers_the_manifest(self) -> None:
+        cases = [f"case {number}" for number in range(1, 9)]
+        (self.root / "tools" / "tool" / "SMART_TOOL.md").write_text(
+            "---\nname: fixture-name\nversion: 1.2.3\n"
+            'description: "Checks apps \\u2014 fast.\\n  Use after v1.2 builds. Then stop."\n'
+            f"platforms: [linux, macos]\nuse_cases: {json.dumps(cases)}\n---\n# Tool\n",
+            encoding="utf-8",
+        )
+        catalog = CatalogPage(rendered_catalog(self.root))
+        row, card = catalog.rows[0], catalog.featured[0]
+        self.assertEqual(row.tagline, "Checks apps - fast.")
+        self.assertEqual(card.tagline, "Checks apps - fast.")
+        self.assertEqual(
+            " ".join(row.search.split()),
+            "fixture-name tool checks apps - fast. use after v1.2 builds. then stop. "
+            f"{' '.join(cases)} linux macos test environments",
+        )
+        page = tool_page(self.root, "tool")
+        self.assertEqual(page.tagline, "Checks apps - fast.")
+        self.assertEqual(
+            page.facts,
+            {
+                "Category": "Test environments",
+                "Platform": "Linux, macOS",
+                "Publisher": "example.test",
+                "Version": "v1.2.3",
+            },
+        )
+        self.assertEqual(page.use_cases, cases[:6])
+        self.assertEqual(
+            page.sections["Use it to."],
+            f"Use it to. Use after v1.2 builds. Then stop. {' '.join(cases[:6])}",
+        )
+        renderer = load_renderer()
+        for text, sentence in (
+            ("One. Two.", "One."),
+            ("Ready? Go.", "Ready?"),
+            ("Reads v1.2 files. More.", "Reads v1.2 files."),
+            ("Spread\n  over lines. More.", "Spread over lines."),
+            ("No terminator", "No terminator"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(renderer.first_sentence(text), sentence)
 
     def test_digital_twin_fixture_renders_category_without_ordinary_badge(self) -> None:
         pinned = self.root / "pinned"
@@ -682,49 +1291,48 @@ class CatalogMetadataTests(unittest.TestCase):
         write_json(target_entry / "listing.json", {"category": "test-environments", "recommended": False})
         unclassified_slug = "a-unclassified"
         write_json(pinned / "tools" / unclassified_slug / "source.json", {"repository": IDENTITY["repository"]})
-        document = rendered_catalog(pinned)
-        cards = CatalogCards(document).cards
-        self.assertEqual(len(cards), 2)
-        by_slug = {card["slug"]: card for card in cards}
-        dtu = by_slug[slug]
-        self.assertEqual(dtu["category"], "test-environments")
-        self.assertIn("Category: Test environments", dtu["text"])
-        self.assertEqual(dtu["badges"], [])
-        unclassified = by_slug[unclassified_slug]
-        self.assertEqual(unclassified["category"], "")
-        self.assertEqual(unclassified["badges"], [])
-        self.assertIn("Category: Other", unclassified["text"])
-        self.assertNotIn("Not currently recommended", document)
-        self.assertIn(
-            'value="__unclassified__">Other',
-            document,
+        catalog = CatalogPage(rendered_catalog(pinned))
+        self.assertEqual([row.slug for row in catalog.rows], [unclassified_slug, slug])
+        unclassified, dtu = catalog.rows
+        self.assertEqual(dtu.category, "test-environments")
+        self.assertEqual(dtu.marks, [])
+        self.assertEqual(dtu.text, f"Digital Twin Universe {dtu.tagline} Get")
+        self.assertTrue(dtu.search.endswith(" test environments"))
+        self.assertEqual(unclassified.category, UNCLASSIFIED)
+        self.assertEqual(unclassified.marks, [])
+        self.assertEqual(unclassified.text, f"A Unclassified {NO_SNAPSHOT} Get")
+        self.assertTrue(unclassified.search.endswith(" other"))
+        # Registry categories without a tool get no chip.
+        self.assertEqual(
+            catalog.chips,
+            [ALL_CHIP, ("test-environments", "Test environments", "false"), OTHER_CHIP],
         )
-        self.assertIn("2 tools", document)
-        self.assertIn("Test environments", document)
-        self.assertEqual(document.count('data-recommended="true"'), 0)
-        self.assertEqual(document.count('data-recommended="false"'), 2)
-        self.assertIn('id="recommended-count">0 tools</span>', document)
-        self.assertIn('id="recommended-region" aria-labelledby="recommended-heading" hidden>', document)
-        self.assertNotIn("recommended-empty", document)
-        self.assertNotIn("No Recommended tools match these filters", document)
-        self.assertNotIn("No tools are currently designated Recommended.", document)
+        self.assertEqual(catalog.count, "2 tools")
+        self.assertEqual(catalog.featured, [])
+        self.assertEqual(catalog.root.select("section", identity="featured"), [])
+        self.assertEqual(catalog.root.select("span", "tag"), [])
+        pages = rendered_tool_pages(pinned)
+        dtu_page = ToolPage(pages[f"tools/{slug}/index.html"])
+        self.assertEqual(dtu_page.pills, [])
+        self.assertEqual(dtu_page.facts["Category"], "Test environments")
+        unclassified_page = ToolPage(pages[f"tools/{unclassified_slug}/index.html"])
+        self.assertEqual(unclassified_page.pills, [])
+        self.assertEqual(unclassified_page.facts["Category"], "Other")
 
     def test_empty_catalog_retains_zero_recommendation_state(self) -> None:
         empty = self.root / "empty"
         write_json(empty / "categories.json", {"categories": [CATEGORY]})
-        document = rendered_catalog(empty)
-        self.assertEqual(CatalogCards(document).cards, [])
-        self.assertIn("0 tools", document)
-        self.assertIn('id="recommended-count">0 tools</span>', document)
-        self.assertIn('id="other-count">0 tools</span>', document)
-        self.assertIn('id="recommended-region" aria-labelledby="recommended-heading" hidden>', document)
-        self.assertNotIn("recommended-empty", document)
-        self.assertNotIn("No Recommended tools match these filters", document)
-        self.assertNotIn("No tools match these filters.", document)
-        self.assertNotIn('data-recommended="true"', document)
-        self.assertNotIn('value="__unclassified__"', document)
+        catalog = CatalogPage(rendered_catalog(empty))
+        self.assertEqual(catalog.rows, [])
+        self.assertEqual(catalog.featured, [])
+        self.assertEqual(catalog.root.select("article"), [])
+        self.assertEqual(catalog.root.select("section", identity="featured"), [])
+        self.assertEqual(catalog.count, "0 tools")
+        self.assertEqual(catalog.chips, [ALL_CHIP])
+        self.assertIn("hidden", catalog.root.one("div", identity="empty-results").attrs)
+        self.assertEqual(rendered_tool_pages(empty), {})
 
-    def test_both_selected_sources_keep_preference_when_upstream_advances(self) -> None:
+    def test_selected_sources_keep_preference_when_upstream_advances(self) -> None:
         advanced = self.root / "advanced"
         write_json(advanced / "categories.json", read_json(ROOT / "categories.json", ROOT))
         original_listings = {}
@@ -737,162 +1345,217 @@ class CatalogMetadataTests(unittest.TestCase):
             provenance = read_json(entry / "provenance.json", advanced)
             provenance["source"]["commit"] = "b" * 40
             write_json(entry / "provenance.json", provenance)
-        document = rendered_catalog(advanced)
-        parsed = CatalogCards(document)
-        self.assertEqual({card["slug"] for card in parsed.cards}, set(CURRENT_SELECTIONS))
-        self.assertEqual(document.count('data-recommended="true"'), 2 * len(CURRENT_SELECTIONS))
-        self.assertNotIn("Recommendation needs review", document)
+        catalog = CatalogPage(rendered_catalog(advanced))
+        pages = rendered_tool_pages(advanced)
+        self.assertEqual(sorted(row.slug for row in catalog.rows), sorted(CURRENT_SELECTIONS))
+        self.assertEqual(sorted(card.slug for card in catalog.featured), sorted(CURRENT_SELECTIONS))
+        self.assertEqual(
+            [tag.text for tag in catalog.root.select("span", "tag")],
+            ["Recommended"] * len(CURRENT_SELECTIONS),
+        )
+        for row in catalog.rows:
+            self.assertEqual(row.marks, MARKS["recommended"])
         for slug in CURRENT_SELECTIONS:
-            self.assertEqual((advanced / "tools" / slug / "listing.json").read_bytes(), original_listings[slug])
-            self.assertTrue(any(
-                tag == "section" and attrs.get("id") == "recommended-region"
-                for tag, attrs in parsed.card_ancestors[slug][0]
-            ))
+            with self.subTest(tool=slug):
+                self.assertEqual((advanced / "tools" / slug / "listing.json").read_bytes(), original_listings[slug])
+                page = ToolPage(pages[f"tools/{slug}/index.html"])
+                source_url = CURRENT_SELECTIONS[slug]["repository"].removesuffix(".git")
+                self.assertEqual(page.pills, ["Recommended"])
+                self.assertEqual(page.actions["View on GitHub"], source_url)
+                self.assertEqual(page.prompt, f"Go to {source_url} and install it.")
+                self.assertEqual(page.sections["Get started."], get_started(source_url))
+                # Neither the advanced commit nor the one recorded before it reaches the page.
+                self.assert_omits_snapshot_source(
+                    page, read_json(advanced / "tools" / slug / "provenance.json", advanced)
+                )
+                self.assert_omits_snapshot_source(
+                    page, read_json(ROOT / "tools" / slug / "provenance.json", ROOT)
+                )
 
     def test_real_catalog_renders_recorded_states_including_drift(self) -> None:
         # Refresh may advance live snapshots without renewing editorial review.
-        # Derive expected badges and preference from the shared identity helper.
-        categories, listings = load_catalog_metadata(ROOT)
-        expected = []
-        expected_labels = {}
-        expected_states = {}
-        for source in catalog_sources(ROOT):
-            slug = source.parent.name
-            pointer = validate_pointer(read_json(source, ROOT))
-            manifest, provenance = read_snapshot(source.parent, ROOT)
-            listing = listings.get(slug)
-            state = recommendation_state(pointer, provenance, listing, bool(manifest))
-            expected_labels[slug] = (
-                f"Category: {categories[listing['category']]['label']}"
-                if listing
-                else "Category: Other"
-            )
-            expected_states[slug] = state
-            card = {
-                "slug": slug,
-                "category": listing["category"] if listing else ("" if categories is not None else None),
-                "badges": [["recommendation", state]] if state != "ordinary" else [],
-            }
-            if state == "recommended":
-                expected.append((False, slug, {**card, "badges": []}))
-            expected.append((state != "recommended", slug, card))
-        document = rendered_catalog(ROOT)
-        parsed = CatalogCards(document)
-        cards = parsed.cards
-        # Category grouping may change ordinary order without changing discovery.
-        rendered_cards = [
-            {field: card[field] for field in ("slug", "category", "badges")}
-            for card in cards
+        # Derive expected markers and preference from the shared identity helper.
+        categories, _ = load_catalog_metadata(ROOT)
+        recorded = recorded_tools(ROOT)
+        catalog = CatalogPage(rendered_catalog(ROOT))
+        ordered = sorted(recorded, key=lambda slug: (recorded[slug].name.casefold(), slug))
+        recommended = [slug for slug in ordered if recorded[slug].state == "recommended"]
+        self.assertEqual([row.slug for row in catalog.rows], ordered)
+        self.assertEqual([card.slug for card in catalog.featured], recommended)
+        self.assertLessEqual(set(recommended), set(CURRENT_SELECTIONS))
+        self.assertEqual(len(catalog.root.select("section", identity="featured")), 1 if recommended else 0)
+        self.assertEqual(len(catalog.root.select("article")), len(ordered) + len(recommended))
+        self.assertEqual(catalog.count, tool_count(len(recorded)))
+        for shown in (*catalog.rows, *catalog.featured):
+            tool = recorded[shown.slug]
+            with self.subTest(tool=shown.slug):
+                self.assertEqual(shown.name, tool.name)
+                self.assertEqual(shown.tagline, tool.tagline)
+                self.assertEqual(shown.links, [f"./tools/{shown.slug}/"] * 2)
+                self.assertEqual(shown.get_label, f"Get {tool.name}")
+        for row in catalog.rows:
+            tool = recorded[row.slug]
+            with self.subTest(row=row.slug):
+                self.assertEqual(row.category, tool.category)
+                self.assertEqual(row.marks, MARKS[tool.state])
+                # The script lowercases the query, never the indexed text.
+                self.assertEqual(row.search, row.search.lower())
+                self.assertIn(tool.name.lower(), row.search)
+                self.assertTrue(row.search.endswith(f" {tool.label.lower()}"))
+        for card in catalog.featured:
+            self.assertEqual(card.marks, [])
+        populated = {
+            tool.category: tool.label for tool in recorded.values() if tool.category != UNCLASSIFIED
+        }
+        chips = [ALL_CHIP] + [
+            (identity, label, "false")
+            for identity, label in sorted(populated.items(), key=lambda item: item[1].casefold())
         ]
-        self.assertEqual(
-            sorted(rendered_cards, key=lambda card: card["slug"]),
-            sorted((card for _, _, card in expected), key=lambda card: card["slug"]),
-        )
-        recommended_slugs = {slug for ordinary, slug, _ in expected if not ordinary}
-        self.assertEqual({card["slug"] for card in cards[:len(recommended_slugs)]}, recommended_slugs)
-        total = len(expected_labels)
-        unclassified = total - len(listings)
-        self.assertIn(f'<p class="catalog-count" id="result-count" role="status">{tool_count(total)}</p>', document)
-        self.assertIn(f'<span class="catalog-count" id="other-count">{tool_count(total)}</span>', document)
-        self.assertIn(
-            f'<span class="catalog-count" id="recommended-count">{tool_count(len(recommended_slugs))}</span>',
-            document,
-        )
-        self.assertEqual(len(cards), len(expected))
-        self.assertEqual(sum(bool(card["category"]) for card in cards), len(listings) + len(recommended_slugs))
-        self.assertEqual(
-            sum(card["category"] == "" for card in cards),
-            len(expected) - len(listings) - len(recommended_slugs),
-        )
-        self.assertEqual(set(expected_labels), {card["slug"] for card in cards})
-        self.assertLessEqual(recommended_slugs, set(CURRENT_SELECTIONS))
-        self.assertEqual(document.count('data-recommended="true"'), 2 * len(recommended_slugs))
-        self.assertEqual(document.count('data-recommended="false"'), total - len(recommended_slugs))
-        self.assertEqual(len({card["slug"] for card in cards}), total)
-        for card in cards:
-            text = " ".join(card["text"].split())
-            self.assertIn(expected_labels[card["slug"]], text)
-            self.assertNotIn("Not currently recommended", text)
-            self.assertEqual(card["ids"], [])
-            self.assertEqual(
-                card["recommended"],
-                str(expected_states[card["slug"]] == "recommended").lower(),
-            )
-            self.assertEqual(
-                card["badges"],
-                []
-                if expected_states[card["slug"]] == "recommended"
-                and any(
-                    tag == "section" and attrs.get("id") == "recommended-region"
-                    for tag, attrs in card["ancestors"]
-                )
-                else [["recommendation", expected_states[card["slug"]]]]
-                if expected_states[card["slug"]] != "ordinary"
-                else [],
-            )
-        self.assertNotIn("category-scope", document)
-        self.assertNotIn("data-scope", document)
-        self.assertNotIn("Other tools", document)
-        self.assertNotIn("Other tool order", document)
-        self.assertNotIn("Not currently recommended", document)
-        self.assertNotIn("What does Recommended mean?", document)
-        self.assertNotIn("No Recommended tools match these filters", document)
-        category_start = document.index('<select id="category"')
-        category_end = document.index('</select>', category_start)
-        category_select = document[category_start:category_end]
+        if any(tool.category == UNCLASSIFIED for tool in recorded.values()):
+            chips.append(OTHER_CHIP)
+        self.assertEqual(catalog.chips, chips)
         self.assertEqual(len(categories), 10)
-        self.assertEqual(category_select.count('<option value="'), 11 + bool(unclassified))
-        self.assertEqual('value="__unclassified__"' in category_select, bool(unclassified))
-        self.assertNotIn("category-navigation", document)
-        self.assertNotIn("data-category-filter", document)
-        for identity, category in categories.items():
-            option = (
-                f'<option value="{identity}">{html.escape(category["label"], quote=True)}</option>'
-            )
-            self.assertIn(option, document)
-        featured_cards = []
-        all_tool_cards = []
-        group_members = Counter()
-        for card in cards:
-            ancestors = card["ancestors"]
-            is_featured = any(
-                tag == "section" and attrs.get("id") == "recommended-region"
-                for tag, attrs in ancestors
-            )
-            if is_featured:
-                featured_cards.append(card)
-                self.assertIn(card["slug"], recommended_slugs)
-                self.assertEqual(card["badges"], [])
-                self.assertFalse(any(
-                    tag == "section" and attrs.get("id") == "other-tools"
-                    for tag, attrs in ancestors
-                ))
-                continue
-            all_tool_cards.append(card)
-            self.assertTrue(any(
-                tag == "section" and attrs.get("id") == "other-tools"
-                for tag, attrs in ancestors
-            ))
-            group = card["category"] or "__unclassified__"
-            self.assertTrue(any(
-                tag == "section" and attrs.get("data-category-group") == group
-                for tag, attrs in ancestors
-            ))
-            group_members[group] += 1
-            if card["slug"] in recommended_slugs:
-                self.assertEqual(card["badges"], [["recommendation", "recommended"]])
-        self.assertEqual(len(featured_cards), len(recommended_slugs))
-        self.assertEqual(len(all_tool_cards), total)
-        self.assertEqual(len({card["slug"] for card in all_tool_cards}), total)
+        self.assertEqual(set(populated), set(categories))
+        self.assertEqual(set(catalog.root.identities().values()), {1})
+
+    def test_build_listings_writes_one_page_per_real_listing(self) -> None:
+        recorded = recorded_tools(ROOT)
+        pages = rendered_tool_pages(ROOT)
         self.assertEqual(
-            group_members,
-            Counter(listings[slug]["category"] if slug in listings else "__unclassified__" for slug in expected_labels),
+            set(pages), {f"tools/{slug}/index.{kind}" for slug in recorded for kind in ("html", "md")}
         )
-        self.assertEqual(set(group_members), set(categories) | ({"__unclassified__"} if unclassified else set()))
-        self.assertEqual(sum(group_members.values()), total)
-        for identity in categories:
-            self.assertGreater(group_members[identity], 0)
-            self.assertIn(f'id="category-group-{identity}"', document)
+        catalog = CatalogPage(rendered_catalog(ROOT))
+        self.assertEqual(
+            {link for shown in (*catalog.rows, *catalog.featured) for link in shown.links},
+            {f"./{path.removesuffix('index.html')}" for path in pages if path.endswith(".html")},
+        )
+        for slug, tool in recorded.items():
+            with self.subTest(tool=slug):
+                page = ToolPage(pages[f"tools/{slug}/index.html"])
+                self.assertEqual(page.title, f"{tool.name} | Amplifier Smart Tools catalog")
+                self.assertEqual(
+                    page.assets,
+                    [
+                        "../../assets/favicon.svg",
+                        "./index.md",
+                        f"{CATALOG_URL}llms.txt",
+                        "../../assets/style.css",
+                        "../../assets/site.js",
+                    ],
+                )
+                self.assertEqual(
+                    [(link.attrs["rel"], link.attrs.get("type")) for link in page.root.select("link")],
+                    [
+                        ("icon", "image/svg+xml"),
+                        ("alternate", "text/markdown"),
+                        ("describedby", "text/plain"),
+                        ("stylesheet", None),
+                    ],
+                )
+                self.assertEqual(page.name, tool.name)
+                self.assertEqual(page.tagline, tool.tagline)
+                self.assertEqual(page.pills, PILLS[tool.state])
+                self.assertEqual(
+                    page.header,
+                    [*(["status-pill"] if page.pills else []), "h1", "facts", "standfirst", "actions"],
+                )
+                self.assertEqual(page.facts["Category"], tool.label)
+                self.assertEqual(page.facts["Publisher"], tool.publisher)
+                self.assertEqual(page.facts.get("Version"), tool.version)
+                self.assertEqual(page.actions["Get"], "#get-started")
+                self.assertEqual(page.actions["View on GitHub"], tool.source_url)
+                self.assertEqual(page.prompt, f"Go to {tool.source_url} and install it.")
+                self.assertEqual(page.sections["Get started."], get_started(tool.source_url))
+                self.assertEqual(page.use_cases, tool.use_cases[:6])
+                self.assertEqual("Use it to." in page.sections, bool(tool.use_cases))
+                self.assertEqual(
+                    page.layout,
+                    ["store-head", "get-started"]
+                    + [
+                        heading
+                        for heading in ("Use it to.", "What it does.", "More tools.")
+                        if heading in page.sections
+                    ],
+                )
+                self.assert_omits_snapshot_source(page, tool.provenance)
+                for other in page.more:
+                    self.assertIn(other.slug, recorded)
+                    self.assertNotEqual(other.slug, slug)
+                    self.assertEqual(other.links, [f"../{other.slug}/"] * 2)
+                self.assertEqual(set(page.root.identities().values()), {1})
+                copy_page = MarkdownPage(pages[f"tools/{slug}/index.md"])
+                self.assertEqual(copy_page.name, tool.name)
+                self.assertTrue(" ".join(copy_page.description.split()).startswith(tool.tagline))
+                facts = {
+                    "Status": "Recommended" if tool.state == "recommended" else None,
+                    "Category": tool.label,
+                    "Platforms": page.facts["Platform"] if page.facts["Platform"] != "Not declared" else None,
+                    "Publisher": tool.publisher,
+                    "Version": tool.version,
+                    "Source": tool.source_url,
+                }
+                self.assertEqual(
+                    list(copy_page.facts.items()),
+                    [(term, value) for term, value in facts.items() if value],
+                )
+                self.assertEqual(copy_page.prompt, f"Go to {tool.source_url} and install it.")
+                self.assertEqual([" ".join(case.split()) for case in copy_page.use_cases], tool.use_cases)
+                self.assertEqual(
+                    copy_page.layout,
+                    [f"# {tool.name}", "## Get started", *(["## Use it to"] if tool.use_cases else [])],
+                )
+
+    def test_website_build_writes_llms_txt_that_lists_every_real_listing_by_category(self) -> None:
+        renderer = load_renderer()
+        out = self.root / "generated"
+        with patch.object(sys, "argv", ["build.py", "--output", str(out)]), redirect_stdout(io.StringIO()):
+            renderer.main()
+        document = (out / "llms.txt").read_text(encoding="utf-8")
+        self.assertEqual(document, renderer.catalog_llms(SITE, ARGS, ROOT))
+        self.assertEqual(
+            document.splitlines()[:5],
+            [
+                "# Amplifier Smart Tools catalog",
+                "",
+                f"> {SITE['description']}",
+                "",
+                f"To let an agent find and install these tools, give it this prompt: {renderer.FAMILY_PROMPT}",
+            ],
+        )
+        recorded = recorded_tools(ROOT)
+        ordered = sorted(recorded, key=lambda slug: (recorded[slug].name.casefold(), slug))
+        recommended = [slug for slug in ordered if recorded[slug].state == "recommended"]
+        labels = sorted(
+            {tool.label for tool in recorded.values()}, key=lambda label: (label == "Other", label.casefold())
+        )
+        expected = {"Recommended": recommended} if recommended else {}
+        expected.update({label: [slug for slug in ordered if recorded[slug].label == label] for label in labels})
+        sections = llms_sections(document)
+        self.assertEqual(list(sections), list(expected))
+        for title, items in sections.items():
+            with self.subTest(section=title):
+                self.assertEqual(
+                    [(name, url, " ".join(notes.split())) for name, url, notes in items],
+                    [
+                        (recorded[slug].name, f"{CATALOG_URL}tools/{slug}/index.md", recorded[slug].tagline)
+                        for slug in expected[title]
+                    ],
+                )
+                for _, url, _ in items:
+                    self.assertTrue((out / url.removeprefix(CATALOG_URL)).is_file(), url)
+        self.assertEqual(
+            {path.relative_to(out).as_posix() for path in out.rglob("index.md")},
+            {f"tools/{slug}/index.md" for slug in recorded},
+        )
+        index = parse((out / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [(link.attrs["rel"], link.attrs["href"]) for link in index.select("link")],
+            [
+                ("icon", "./assets/favicon.svg"),
+                ("describedby", f"{CATALOG_URL}llms.txt"),
+                ("stylesheet", "./assets/style.css"),
+            ],
+        )
 
 
 if __name__ == "__main__":
