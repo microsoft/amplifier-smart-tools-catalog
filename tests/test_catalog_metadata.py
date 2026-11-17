@@ -71,6 +71,11 @@ CURRENT_SELECTIONS = {
 }
 SITE = json.loads((ROOT / "site" / "site.json").read_text(encoding="utf-8"))
 ARGS = SimpleNamespace(local=False, family_owner="microsoft")
+WEBSITES = {
+    key: f"https://microsoft.github.io/{page['repository']}/"
+    for key, page in json.loads((ROOT / "site" / "theme" / "family.json").read_text(encoding="utf-8"))["pages"].items()
+    if page["owner"] == "microsoft" and key not in ("overview", "catalog")
+}
 CATALOG_URL = "https://microsoft.github.io/amplifier-smart-tools-catalog/"
 VOID_TAGS = frozenset({
     "area", "base", "br", "col", "embed", "hr", "img", "input",
@@ -127,11 +132,19 @@ class Element:
     @property
     def text(self) -> str:
         # A tool without its own glyph draws a letter inside svg; that is art, not copy.
-        parts = [
-            child if isinstance(child, str) else child.text
-            for child in self.children
-            if isinstance(child, str) or child.tag != "svg"
-        ]
+        # A wbr marks where a long word may wrap, so the text on its two sides is one word.
+        parts: list[str] = []
+        joined = False
+        for child in self.children:
+            if isinstance(child, Element) and child.tag in ("svg", "wbr"):
+                joined = child.tag == "wbr"
+                continue
+            piece = child if isinstance(child, str) else child.text
+            if joined and parts:
+                parts[-1] += piece
+            else:
+                parts.append(piece)
+            joined = False
         return " ".join(" ".join(parts).split())
 
     def ancestors(self) -> Iterator[Element]:
@@ -371,6 +384,11 @@ def load_renderer() -> ModuleType:
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
     return renderer
+
+
+def listing_link(slug: str, state: str, base: str = "./tools/") -> str:
+    """Where a tool's row and card lead: a recommended tool with its own website links there."""
+    return WEBSITES[slug] if state == "recommended" and slug in WEBSITES else f"{base}{slug}/"
 
 
 def rendered_catalog(root: Path) -> str:
@@ -1391,7 +1409,7 @@ class CatalogMetadataTests(unittest.TestCase):
             with self.subTest(tool=shown.slug):
                 self.assertEqual(shown.name, tool.name)
                 self.assertEqual(shown.tagline, tool.tagline)
-                self.assertEqual(shown.links, [f"./tools/{shown.slug}/"] * 2)
+                self.assertEqual(shown.links, [listing_link(shown.slug, tool.state)] * 2)
                 self.assertEqual(shown.get_label, f"Get {tool.name}")
         for row in catalog.rows:
             tool = recorded[row.slug]
@@ -1427,7 +1445,7 @@ class CatalogMetadataTests(unittest.TestCase):
         catalog = CatalogPage(rendered_catalog(ROOT))
         self.assertEqual(
             {link for shown in (*catalog.rows, *catalog.featured) for link in shown.links},
-            {f"./{path.removesuffix('index.html')}" for path in pages if path.endswith(".html")},
+            {listing_link(slug, tool.state) for slug, tool in recorded.items()},
         )
         for slug, tool in recorded.items():
             with self.subTest(tool=slug):
@@ -1481,7 +1499,7 @@ class CatalogMetadataTests(unittest.TestCase):
                 for other in page.more:
                     self.assertIn(other.slug, recorded)
                     self.assertNotEqual(other.slug, slug)
-                    self.assertEqual(other.links, [f"../{other.slug}/"] * 2)
+                    self.assertEqual(other.links, [listing_link(other.slug, recorded[other.slug].state, "../")] * 2)
                 self.assertEqual(set(page.root.identities().values()), {1})
                 copy_page = MarkdownPage(pages[f"tools/{slug}/index.md"])
                 self.assertEqual(copy_page.name, tool.name)

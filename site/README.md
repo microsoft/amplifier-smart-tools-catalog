@@ -4,7 +4,7 @@ This repository's promotional page uses the Amplifier Smart Tools family theme.
 Product page content lives in `site.json`. The canonical theme is maintained in
 `microsoft/amplifier-smart-tools/site/theme`; this repository carries a versioned
 copy so a build does not depend on a moving remote theme or an online service.
-Theme version: 0.2.0. Theme code is MIT licensed.
+Theme version: 0.3.0. Theme code is MIT licensed.
 
 ## Build and preview
 
@@ -106,7 +106,7 @@ Put Search and one row of category chips above all results. Show a chip only for
 
 Search and chips remain hidden without JavaScript so all unique listings stay visible in All tools, alongside the Recommended cards. A status for screen readers reports the number of matching unique listings.
 
-Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`: icon, name, one line of facts, first sentence, an install prompt for an agent, up to six use cases, and other tools in the same category.
+Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`, or the tool's own website when it is recommended and has one in `family.json`. The catalog page shows the icon, name, one line of facts, first sentence, an install prompt for an agent, up to six use cases, and other tools in the same category.
 
 Keep review evidence free of credentials and private details. Preserve public
 source URLs and exact generated manifests. Implement shared rendering and

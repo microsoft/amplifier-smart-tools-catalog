@@ -212,9 +212,10 @@ This repository does not make a response-time commitment.""",
             "show one empty message with a Clear search action",
             "Do not display category scope text",
             (
-                "Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`: icon, name, "
-                "one line of facts, first sentence, an install prompt for an agent, up to six use cases, "
-                "and other tools in the same category."
+                "Get, a row's name, and a card open the tool's catalog page at `tools/<slug>/`, or the tool's "
+                "own website when it is recommended and has one in `family.json`. The catalog page shows the "
+                "icon, name, one line of facts, first sentence, an install prompt for an agent, up to six use "
+                "cases, and other tools in the same category."
             ),
         ):
             self.assertIn(phrase, site)
